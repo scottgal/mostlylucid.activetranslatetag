@@ -1,0 +1,86 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
+
+    <!-- NuGet Package Metadata -->
+    <PackageId>mostlylucid.activetranslatetag</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>mostlylucid.net</Authors>
+    <Description>Active translation tag helpers for ASP.NET Core with HTMX integration and AI-powered translations. Automatically translates UI strings and user content with real-time updates via SignalR.</Description>
+    <PackageProjectUrl>https://www.mostlylucid.net</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/mostlylucid/mostlylucid.activetranslatetag</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>asp.net-core;translation;localization;i18n;htmx;signalr;ai;tag-helpers;active-translation</PackageTags>
+    <PackageLicenseExpression>Unlicense</PackageLicenseExpression>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReleaseNotes>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\..\..\releasenotext.tx'))</PackageReleaseNotes>
+
+    <!-- Disable default content items to avoid duplicates -->
+    <EnableDefaultContentItems>false</EnableDefaultContentItems>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <GenerateStaticWebAssetsManifest>false</GenerateStaticWebAssetsManifest>
+    <IncludeStaticWebAssets>false</IncludeStaticWebAssets>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Explicitly include source files, exclude Examples folder -->
+    <Compile Include="**\*.cs" Exclude="bin\**;obj\**;Examples\**" />
+    <EmbeddedResource Include="**\*.resx" Exclude="bin\**;obj\**" />
+
+    <!-- Include example files as content only (not compiled) -->
+    <None Include="Examples\**\*" Pack="true" PackagePath="contentFiles\any\net9.0\Examples" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ASP.NET Core dependencies -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
+
+    <!-- Entity Framework Core for PostgreSQL -->
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
+
+    <!-- Entity Framework Core for SQLite -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.0" />
+
+    <!-- Entity Framework Core for SQL Server -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.0" />
+
+    <!-- AI capabilities -->
+    <PackageReference Include="Microsoft.Extensions.AI" Version="9.10.1" />
+    <PackageReference Include="Serilog" Version="4.2.0" />
+
+    <!-- JSON serialization for file storage -->
+    <PackageReference Include="System.Text.Json" Version="9.0.0" />
+
+    <!-- SignalR is included in Microsoft.AspNetCore.App -->
+
+    <!-- Utilities -->
+    <PackageReference Include="System.IO.Hashing" Version="9.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Include README in package from repository root -->
+    <None Include="..\..\README.md" Pack="true" PackagePath="/" />
+
+    <!-- Include JavaScript files (both source and minified) as content -->
+    <Content Include="wwwroot\**\*.js" Pack="true" PackagePath="contentFiles\any\net9.0\wwwroot" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="wwwroot\**\*.js" Pack="true" PackagePath="content\wwwroot" />
+    <Content Include="wwwroot\**\*.map" Pack="true" PackagePath="contentFiles\any\net9.0\wwwroot" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="wwwroot\**\*.map" Pack="true" PackagePath="content\wwwroot" />
+    <Content Include="wwwroot\css\**\*" Pack="true" PackagePath="contentFiles\any\net9.0\wwwroot\css" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="wwwroot\css\**\*" Pack="true" PackagePath="content\wwwroot\css" />
+  </ItemGroup>
+
+  <!-- Build JavaScript before pack -->
+  <Target Name="BuildJavaScript" BeforeTargets="BeforeBuild">
+    <Message Importance="high" Text="Minifying JavaScript files..." />
+    <Exec Command="npm install" WorkingDirectory="$(ProjectDir)..\.." Condition="!Exists('$(ProjectDir)..\..\node_modules')" />
+    <Exec Command="npm run minify" WorkingDirectory="$(ProjectDir)..\.." />
+  </Target>
+
+</Project>

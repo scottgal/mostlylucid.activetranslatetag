@@ -1,0 +1,14 @@
+{
+  "name": "mostlylucid.activetranslatetag",
+  "version": "1.0.0",
+  "description": "Build tools for Active Translation Tag Helpers",
+  "private": true,
+  "scripts": {
+    "minify": "terser src/mostlylucid.activetranslatetag/wwwroot/js/translation.js -c -m --source-map --output src/mostlylucid.activetranslatetag/wwwroot/js/translation.min.js && terser src/mostlylucid.activetranslatetag/wwwroot/js/translation.client.js -c -m --source-map --output src/mostlylucid.activetranslatetag/wwwroot/js/translation.client.min.js && terser src/mostlylucid.activetranslatetag/wwwroot/js/translation-bundle.js -c -m --source-map --output src/mostlylucid.activetranslatetag/wwwroot/js/translation-bundle.min.js",
+    "watch": "npm run minify -- --watch",
+    "build": "npm run minify"
+  },
+  "devDependencies": {
+    "terser": "^5.36.0"
+  }
+}

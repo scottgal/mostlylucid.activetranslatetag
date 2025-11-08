@@ -1,6 +1,6 @@
-# LLM Translation System
+# mostlylucid.activetranslatetag
 
-**Note**: This project will be renamed to `mostlylucid.llmtranslate` - an open-source AI-powered translation system for ASP.NET Core from [mostlylucid.net](https://www.mostlylucid.net).
+**Active Translation Tag Helpers** - An open-source AI-powered translation system for ASP.NET Core from [mostlylucid.net](https://www.mostlylucid.net).
 
 Auto-translation tag helpers for ASP.NET Core with HTMX integration and AI-powered translations. Automatically translates UI strings and user content with real-time updates via SignalR.
 
@@ -18,7 +18,7 @@ Auto-translation tag helpers for ASP.NET Core with HTMX integration and AI-power
 ## Installation
 
 ```bash
-dotnet add package LucidForums.AutoTranslate
+dotnet add package mostlylucid.activetranslatetag
 ```
 
 ## Storage Configuration
@@ -189,6 +189,7 @@ Supported built-ins:
 - Azure OpenAI (Azure AI) Chat Completions
 - Ollama (local LLM)
 - LM Studio (local, OpenAI-compatible)
+- EasyNMT (local machine translation)
 
 General registration pattern (Program.cs):
 
@@ -228,10 +229,10 @@ builder.Services.AddHttpClient("OpenAI", c => c.BaseAddress = new Uri("https://a
 builder.Services.AddScoped<IAiTranslationProvider>(sp =>
 {
     var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient("OpenAI");
-    var logger = sp.GetRequiredService<ILogger<mostlylucid.llmtranslate.Services.Providers.OpenAiTranslationProvider>>();
+    var logger = sp.GetRequiredService<ILogger<mostlylucid.activetranslatetag.Services.Providers.OpenAiTranslationProvider>>();
     var apiKey = cfg["OpenAI:ApiKey"] ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY")!;
     var model = cfg["OpenAI:Model"] ?? Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? "gpt-4o-mini";
-    return new mostlylucid.llmtranslate.Services.Providers.OpenAiTranslationProvider(http, logger, apiKey, model);
+    return new mostlylucid.activetranslatetag.Services.Providers.OpenAiTranslationProvider(http, logger, apiKey, model);
 });
 ```
 
@@ -263,12 +264,12 @@ builder.Services.AddHttpClient("AzureOpenAI");
 builder.Services.AddScoped<IAiTranslationProvider>(sp =>
 {
     var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient("AzureOpenAI");
-    var logger = sp.GetRequiredService<ILogger<mostlylucid.llmtranslate.Services.Providers.AzureAiTranslationProvider>>();
+    var logger = sp.GetRequiredService<ILogger<mostlylucid.activetranslatetag.Services.Providers.AzureAiTranslationProvider>>();
     var endpoint = cfg["AzureOpenAI:Endpoint"] ?? Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")!;
     var apiKey = cfg["AzureOpenAI:ApiKey"] ?? Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY")!;
     var deployment = cfg["AzureOpenAI:Deployment"] ?? Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT")!;
     var apiVersion = cfg["AzureOpenAI:ApiVersion"] ?? Environment.GetEnvironmentVariable("AZURE_OPENAI_API_VERSION") ?? "2024-06-01";
-    return new mostlylucid.llmtranslate.Services.Providers.AzureAiTranslationProvider(http, logger, endpoint, apiKey, deployment, apiVersion);
+    return new mostlylucid.activetranslatetag.Services.Providers.AzureAiTranslationProvider(http, logger, endpoint, apiKey, deployment, apiVersion);
 });
 ```
 
@@ -296,10 +297,10 @@ builder.Services.AddHttpClient("Ollama", c => c.BaseAddress = new Uri(cfg["Ollam
 builder.Services.AddScoped<IAiTranslationProvider>(sp =>
 {
     var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient("Ollama");
-    var logger = sp.GetRequiredService<ILogger<mostlylucid.llmtranslate.Services.Providers.OllamaTranslationProvider>>();
+    var logger = sp.GetRequiredService<ILogger<mostlylucid.activetranslatetag.Services.Providers.OllamaTranslationProvider>>();
     var model = cfg["Ollama:Model"] ?? Environment.GetEnvironmentVariable("OLLAMA_MODEL") ?? "llama3.2";
     var baseUrl = cfg["Ollama:BaseUrl"] ?? Environment.GetEnvironmentVariable("OLLAMA_BASE_URL");
-    return new mostlylucid.llmtranslate.Services.Providers.OllamaTranslationProvider(http, logger, model, baseUrl);
+    return new mostlylucid.activetranslatetag.Services.Providers.OllamaTranslationProvider(http, logger, model, baseUrl);
 });
 ```
 
@@ -327,10 +328,40 @@ builder.Services.AddHttpClient("LmStudio", c => c.BaseAddress = new Uri(cfg["LmS
 builder.Services.AddScoped<IAiTranslationProvider>(sp =>
 {
     var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient("LmStudio");
-    var logger = sp.GetRequiredService<ILogger<mostlylucid.llmtranslate.Services.Providers.LmStudioTranslationProvider>>();
+    var logger = sp.GetRequiredService<ILogger<mostlylucid.activetranslatetag.Services.Providers.LmStudioTranslationProvider>>();
     var model = cfg["LmStudio:Model"] ?? Environment.GetEnvironmentVariable("LMSTUDIO_MODEL") ?? "qwen2.5:latest";
     var baseUrl = cfg["LmStudio:BaseUrl"] ?? Environment.GetEnvironmentVariable("LMSTUDIO_BASE_URL");
-    return new mostlylucid.llmtranslate.Services.Providers.LmStudioTranslationProvider(http, logger, model, baseUrl);
+    return new mostlylucid.activetranslatetag.Services.Providers.LmStudioTranslationProvider(http, logger, model, baseUrl);
+});
+```
+
+### EasyNMT (local machine translation)
+
+Run EasyNMT locally for fast, privacy-focused machine translation without API keys.
+
+Docker setup:
+```bash
+docker run -p 24080:80 easynmt/api:2.0.2-cpu
+```
+
+appsettings.json:
+```json
+{
+  "EasyNMT": {
+    "BaseUrl": "http://localhost:24080/"
+  }
+}
+```
+
+Program.cs registration:
+```csharp
+builder.Services.AddHttpClient("EasyNMT");
+builder.Services.AddScoped<IAiTranslationProvider>(sp =>
+{
+    var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient("EasyNMT");
+    var logger = sp.GetRequiredService<ILogger<mostlylucid.activetranslatetag.Services.Providers.EasyNmtTranslationProvider>>();
+    var baseUrl = cfg["EasyNMT:BaseUrl"] ?? Environment.GetEnvironmentVariable("EASYNMT_BASE_URL") ?? "http://localhost:24080/";
+    return new mostlylucid.activetranslatetag.Services.Providers.EasyNmtTranslationProvider(http, logger, baseUrl);
 });
 ```
 
@@ -339,93 +370,6 @@ Switching providers: register only one IAiTranslationProvider at a time, or use 
 Provider behavior notes:
 - All providers support single and batch translation; if batch JSON parsing fails, they fall back to per-item translation.
 - Prompts preserve placeholders like {0} and {name}, and HTML tags; still validate outputs for your UI.
-
-## AI Provider Implementation
-
-You must implement `IAiTranslationProvider` to connect your AI backend:
-
-### Example: OpenAI
-
-```csharp
-public class OpenAiTranslationProvider : IAiTranslationProvider
-{
-    private readonly HttpClient _http;
-    private readonly string _apiKey;
-
-    public async Task<string> TranslateAsync(
-        string text,
-        string targetLanguage,
-        string? sourceLanguage = "en",
-        CancellationToken ct = default)
-    {
-        var response = await _http.PostAsJsonAsync("https://api.openai.com/v1/chat/completions", new
-        {
-            model = "gpt-4",
-            messages = new[]
-            {
-                new { role = "system", content = $"Translate from {sourceLanguage} to {targetLanguage}" },
-                new { role = "user", content = text }
-            }
-        }, ct);
-
-        var result = await response.Content.ReadFromJsonAsync<OpenAiResponse>(ct);
-        return result.Choices[0].Message.Content;
-    }
-
-    public async Task<Dictionary<string, string>> TranslateBatchAsync(
-        Dictionary<string, string> items,
-        string targetLanguage,
-        string? sourceLanguage = "en",
-        CancellationToken ct = default)
-    {
-        var json = JsonSerializer.Serialize(items.Select(kvp => new { key = kvp.Key, text = kvp.Value }));
-
-        var prompt = $@"Translate these strings from {sourceLanguage} to {targetLanguage}.
-Return ONLY a JSON array: [{{""key"":""..."", ""translated"":""...""}}]
-
-{json}";
-
-        var translated = await TranslateAsync(prompt, targetLanguage, sourceLanguage, ct);
-        var result = JsonSerializer.Deserialize<List<BatchItem>>(translated);
-
-        return result.ToDictionary(x => x.Key, x => x.Translated);
-    }
-}
-```
-
-### Example: Ollama (Local LLM)
-
-```csharp
-public class OllamaTranslationProvider : IAiTranslationProvider
-{
-    private readonly HttpClient _http;
-
-    public async Task<string> TranslateAsync(
-        string text,
-        string targetLanguage,
-        string? sourceLanguage = "en",
-        CancellationToken ct = default)
-    {
-        var response = await _http.PostAsJsonAsync("http://localhost:11434/api/generate", new
-        {
-            model = "llama3.2",
-            prompt = $"Translate from {sourceLanguage} to {targetLanguage}: {text}",
-            stream = false
-        }, ct);
-
-        var result = await response.Content.ReadFromJsonAsync<OllamaResponse>(ct);
-        return result.Response;
-    }
-
-    // ... implement TranslateBatchAsync similarly
-}
-```
-
-**Register your provider:**
-
-```csharp
-builder.Services.AddScoped<IAiTranslationProvider, OpenAiTranslationProvider>();
-```
 
 ## Application Configuration
 
@@ -446,7 +390,7 @@ app.MapControllers();
 Add to `_ViewImports.cshtml`:
 
 ```cshtml
-@addTagHelper *, LucidForums.AutoTranslate
+@addTagHelper *, mostlylucid.activetranslatetag
 ```
 
 ## Usage
@@ -703,7 +647,7 @@ dotnet ef migrations add Initial --context TranslationDbContext
 
 ## License
 
-MIT
+Unlicense
 
 ## Author
 
@@ -711,10 +655,10 @@ mostlylucid.net - [https://www.mostlylucid.net](https://www.mostlylucid.net)
 
 ## Contributing
 
-Contributions welcome! Please open an issue or PR.
+Contributions welcome! Please open an issue or PR at [https://github.com/mostlylucid/mostlylucid.activetranslatetag](https://github.com/mostlylucid/mostlylucid.activetranslatetag)
 
 ## Support
 
 - Documentation: This README
-- GitHub Issues: [Report issues](https://github.com/lucidforums/LucidForums/issues)
+- GitHub Issues: [Report issues](https://github.com/mostlylucid/mostlylucid.activetranslatetag/issues)
 - Website: [mostlylucid.net](https://www.mostlylucid.net)

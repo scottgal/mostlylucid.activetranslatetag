@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet restore:*)",
+      "Bash(dotnet build:*)",
+      "Bash(dotnet test:*)",
+      "Bash(find:*)",
+      "Bash(npm install)",
+      "Bash(git checkout:*)",
+      "Bash(dotnet add:*)",
+      "Bash(curl:*)",
+      "Bash(/tmp/test.json)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
