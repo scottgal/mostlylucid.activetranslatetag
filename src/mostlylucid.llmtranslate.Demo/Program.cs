@@ -14,8 +14,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 
-// Minimal demo AI provider (echoes text with target language suffix)
-builder.Services.AddScoped<IAiTranslationProvider, DemoEchoAiProvider>();
+// Register IAiTranslationProvider via configuration in AddAutoTranslateFromConfiguration below
+// (Remove demo echo provider to use real backends configured in appsettings.json)
 
 // Add MVC + Razor
 builder.Services.AddControllersWithViews();

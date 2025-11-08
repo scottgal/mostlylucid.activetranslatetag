@@ -1,0 +1,7 @@
+mostlylucid.llmtranslate 1.0.0
+
+- Switched demo and configuration to support Ollama providers by default.
+- Added `OllamaTranslationProvider` with simple prompt-based translate and safe fallbacks.
+- Preserved EasyNMT and OpenAI provider support for back-compat, but preference is for Ollama via `Ai:OllamaProviders`.
+- Added chunking decorator support configurable via `LlmTranslate:Ai:Chunking`.
+- NuGet metadata now links to repository root README and reads these release notes via MSBuild `System.IO.File.ReadAllText`.

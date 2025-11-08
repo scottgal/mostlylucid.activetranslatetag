@@ -15,9 +15,10 @@
     <RepositoryUrl>https://github.com/lucidforums/LucidForums</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageTags>asp.net-core;translation;localization;i18n;htmx;signalr;ai;tag-helpers</PackageTags>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>Unlicense</PackageLicenseExpression>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReleaseNotes>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\..\..\releasenotext.tx'))</PackageReleaseNotes>
 
     <!-- Disable default content items to avoid duplicates -->
     <EnableDefaultContentItems>false</EnableDefaultContentItems>
@@ -62,9 +63,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Include README in package -->
-    <None Include="README.md" Pack="true" PackagePath="\" />
-    <Content Include=".gitignore" />
+    <!-- Include README in package from repository root -->
+    <None Include="..\..\README.md" Pack="true" PackagePath="/" />
 
     <!-- Include JavaScript files as content that will be copied to consumer's wwwroot -->
     <Content Include="wwwroot\**\*" Pack="true" PackagePath="contentFiles\any\net9.0\wwwroot" CopyToOutputDirectory="PreserveNewest" />

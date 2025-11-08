@@ -12,6 +12,11 @@ public class LlmTranslateOptions
     public TranslationStorageOptions Storage { get; set; } = new();
 
     /// <summary>
+    /// AI provider options (provider selection, chunking, per-provider settings)
+    /// </summary>
+    public AiOptions Ai { get; set; } = new();
+
+    /// <summary>
     /// Reserved for future options (e.g., SignalR, client options). Currently unused.
     /// </summary>
     public bool Reserved { get; set; }

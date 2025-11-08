@@ -268,6 +268,89 @@ public static class ServiceCollectionExtensions
     {
         var options = new mostlylucid.llmtranslate.Configuration.LlmTranslateOptions();
         configuration.GetSection(sectionName).Bind(options);
+
+        // Register HttpClient factory (for providers)
+        services.AddHttpClient();
+
+        // Register IAiTranslationProvider from configuration (supports multiple providers, choose default)
+        services.AddScoped<IAiTranslationProvider>(sp =>
+        {
+            var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+            var httpFactory = sp.GetRequiredService<System.Net.Http.IHttpClientFactory>();
+            var ai = options.Ai ?? new mostlylucid.llmtranslate.Configuration.AiOptions();
+            var defaultName = ai.DefaultProvider;
+
+            // Try resolve default from Ollama list first
+            mostlylucid.llmtranslate.Services.IAiTranslationProvider? selected = null;
+
+            if (ai.OllamaProviders != null && ai.OllamaProviders.Length > 0)
+            {
+                var pick = ai.OllamaProviders.FirstOrDefault(p => !string.IsNullOrWhiteSpace(defaultName) && string.Equals(p.Name, defaultName, StringComparison.OrdinalIgnoreCase))
+                           ?? (ai.OllamaProviders.Length == 1 ? ai.OllamaProviders[0] : null);
+                if (pick != null)
+                {
+                    var http = httpFactory.CreateClient($"ollama:{pick.Name}");
+                    if (!string.IsNullOrWhiteSpace(pick.BaseUrl))
+                    {
+                        http.BaseAddress = new Uri(pick.BaseUrl);
+                    }
+                    var provLogger = loggerFactory.CreateLogger<mostlylucid.llmtranslate.Services.Providers.OllamaTranslationProvider>();
+                    selected = new mostlylucid.llmtranslate.Services.Providers.OllamaTranslationProvider(http, provLogger, pick.BaseUrl, pick.Model);
+                }
+            }
+
+            // Back-compat: If not selected, try EasyNMT list
+            if (selected == null && ai.EasyNmtProviders != null && ai.EasyNmtProviders.Length > 0)
+            {
+                var pick = ai.EasyNmtProviders.FirstOrDefault(p => !string.IsNullOrWhiteSpace(defaultName) && string.Equals(p.Name, defaultName, StringComparison.OrdinalIgnoreCase))
+                           ?? (ai.EasyNmtProviders.Length == 1 ? ai.EasyNmtProviders[0] : null);
+                if (pick != null)
+                {
+                    var http = httpFactory.CreateClient($"easynmt:{pick.Name}");
+                    if (!string.IsNullOrWhiteSpace(pick.BaseUrl))
+                    {
+                        http.BaseAddress = new Uri(pick.BaseUrl);
+                    }
+                    var provLogger = loggerFactory.CreateLogger<mostlylucid.llmtranslate.Services.Providers.EasyNmtTranslationProvider>();
+                    selected = new mostlylucid.llmtranslate.Services.Providers.EasyNmtTranslationProvider(http, provLogger, pick.BaseUrl);
+                }
+            }
+
+            // Back-compat: If not selected, try OpenAI list
+            if (selected == null && ai.OpenAiProviders != null && ai.OpenAiProviders.Length > 0)
+            {
+                var pick = ai.OpenAiProviders.FirstOrDefault(p => !string.IsNullOrWhiteSpace(defaultName) && string.Equals(p.Name, defaultName, StringComparison.OrdinalIgnoreCase))
+                           ?? (ai.OpenAiProviders.Length == 1 ? ai.OpenAiProviders[0] : null);
+                if (pick != null)
+                {
+                    var http = httpFactory.CreateClient($"openai:{pick.Name}");
+                    if (!string.IsNullOrWhiteSpace(pick.BaseUrl))
+                    {
+                        http.BaseAddress = new Uri(pick.BaseUrl!);
+                    }
+                    var provLogger = loggerFactory.CreateLogger<mostlylucid.llmtranslate.Services.Providers.OpenAiTranslationProvider>();
+                    selected = new mostlylucid.llmtranslate.Services.Providers.OpenAiTranslationProvider(http, provLogger, pick.ApiKey ?? string.Empty, pick.Model);
+                }
+            }
+
+            // If still not selected, throw to make misconfiguration visible in early stage
+            if (selected == null)
+            {
+                throw new InvalidOperationException("No AI provider configured. Please configure LlmTranslate:Ai with at least one provider and set DefaultProvider.");
+            }
+
+            // Apply chunking decorator if enabled
+            var chunk = ai.Chunking ?? new mostlylucid.llmtranslate.Configuration.ChunkingOptions();
+            if (chunk.Enabled)
+            {
+                var chunkLogger = loggerFactory.CreateLogger<mostlylucid.llmtranslate.Services.Providers.ChunkingAiTranslationProvider>();
+                selected = new mostlylucid.llmtranslate.Services.Providers.ChunkingAiTranslationProvider(selected, chunk.ChunkLength, chunk.Overlap, chunkLogger);
+            }
+
+            return selected;
+        });
+
+        // Finally register storage and services
         return services.AddAutoTranslate(options.Storage);
     }
 

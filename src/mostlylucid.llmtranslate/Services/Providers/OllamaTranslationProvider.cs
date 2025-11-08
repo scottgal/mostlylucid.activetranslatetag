@@ -1,21 +1,26 @@
 ﻿using System.Net.Http.Json;
 using System.Text.Json;
-using mostlylucid.llmtranslate.Services;
 using Microsoft.Extensions.Logging;
 
 namespace mostlylucid.llmtranslate.Services.Providers;
 
+/// <summary>
+/// IAiTranslationProvider implementation that calls a local/remote Ollama server.
+/// Uses the /api/generate endpoint with a translation prompt.
+/// </summary>
 public class OllamaTranslationProvider : IAiTranslationProvider
 {
     private readonly HttpClient _http;
     private readonly ILogger<OllamaTranslationProvider> _logger;
     private readonly string _model;
 
-    public OllamaTranslationProvider(HttpClient httpClient, ILogger<OllamaTranslationProvider> logger, string model = "llama3.2", string? baseUrl = null)
+    /// <param name="baseUrl">Base URL of the Ollama server, e.g. http://localhost:11434/</param>
+    /// <param name="model">Model to use, e.g. "llama3.1"</param>
+    public OllamaTranslationProvider(HttpClient httpClient, ILogger<OllamaTranslationProvider> logger, string? baseUrl = null, string model = "llama3.1")
     {
         _http = httpClient;
         _logger = logger;
-        _model = model;
+        _model = string.IsNullOrWhiteSpace(model) ? "llama3.1" : model;
         if (!string.IsNullOrWhiteSpace(baseUrl))
         {
             _http.BaseAddress = new Uri(baseUrl);
@@ -30,16 +35,21 @@ public class OllamaTranslationProvider : IAiTranslationProvider
     {
         try
         {
-            var body = new
+            var prompt = BuildPrompt(text, targetLanguage, sourceLanguage);
+            using var resp = await _http.PostAsJsonAsync("api/generate", new
             {
                 model = _model,
-                prompt = $"Translate from {sourceLanguage ?? "auto"} to {targetLanguage}: {text}",
+                prompt,
                 stream = false
-            };
-            using var resp = await _http.PostAsJsonAsync("api/generate", body, ct);
-            resp.EnsureSuccessStatusCode();
+            }, ct);
+            if (!resp.IsSuccessStatusCode)
+            {
+                var err = await resp.Content.ReadAsStringAsync(ct);
+                _logger.LogWarning("Ollama /api/generate failed: {Status} {Error}", resp.StatusCode, err);
+                return text; // fail soft
+            }
             var doc = await resp.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken: ct);
-            var content = doc?.RootElement.TryGetProperty("response", out var r) == true ? r.GetString() : null;
+            var content = doc?.RootElement.TryGetProperty("response", out var respText) == true ? respText.GetString() : null;
             return string.IsNullOrWhiteSpace(content) ? text : content!;
         }
         catch (Exception ex)
@@ -51,72 +61,18 @@ public class OllamaTranslationProvider : IAiTranslationProvider
 
     public async Task<Dictionary<string, string>> TranslateBatchAsync(Dictionary<string, string> items, string targetLanguage, string? sourceLanguage = "en", CancellationToken ct = default)
     {
-        var payload = JsonSerializer.Serialize(items.Select(kvp => new { key = kvp.Key, text = kvp.Value }));
-        var prompt = $"Translate the following UI strings from {sourceLanguage ?? "auto"} to {targetLanguage}.\n" +
-                     "Return ONLY a JSON array of objects with properties \"key\" and \"translated\".\n" +
-                     "Preserve placeholders like {{0}} and {{name}}, and any HTML tags/entities.\n\n" +
-                     "Input:\n" + payload;
-
-        var answer = await TranslateAsync(prompt, targetLanguage, sourceLanguage, ct);
-        var parsed = TryParseBatch(answer);
-        if (parsed.Count == 0)
-        {
-            foreach (var (k, v) in items)
-            {
-                parsed[k] = await TranslateAsync(v, targetLanguage, sourceLanguage, ct);
-            }
-        }
-        return parsed;
-    }
-
-    private static Dictionary<string, string> TryParseBatch(string? text)
-    {
+        // Ollama doesn't have a native batch translate: we can construct a JSON-guided prompt, but keep simple and robust.
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (string.IsNullOrWhiteSpace(text)) return result;
-        try
+        foreach (var (key, value) in items)
         {
-            var arrayText = ExtractFirstJsonArray(text) ?? text;
-            var items = JsonSerializer.Deserialize<List<BatchItem>>(arrayText, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            if (items != null)
-            {
-                foreach (var it in items)
-                {
-                    if (!string.IsNullOrWhiteSpace(it.Key))
-                        result[it.Key] = it.Translated ?? string.Empty;
-                }
-            }
-        }
-        catch
-        { 
+            result[key] = await TranslateAsync(value, targetLanguage, sourceLanguage, ct);
         }
         return result;
     }
 
-    private static string? ExtractFirstJsonArray(string input)
+    private static string BuildPrompt(string text, string targetLanguage, string? sourceLanguage)
     {
-        int start = -1, depth = 0;
-        for (int i = 0; i < input.Length; i++)
-        {
-            if (input[i] == '[')
-            {
-                if (depth == 0) start = i;
-                depth++;
-            }
-            else if (input[i] == ']')
-            {
-                depth--;
-                if (depth == 0 && start >= 0)
-                {
-                    return input.Substring(start, i - start + 1);
-                }
-            }
-        }
-        return null;
-    }
-
-    private sealed class BatchItem
-    {
-        public string? Key { get; set; }
-        public string? Translated { get; set; }
+        var src = string.IsNullOrWhiteSpace(sourceLanguage) ? "auto" : sourceLanguage;
+        return $"Translate the following text from {src} to {targetLanguage}. Preserve placeholders like {{0}} or {{name}}, and preserve HTML tags as-is.\n\nText:\n{text}";
     }
 }
