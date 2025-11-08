@@ -1,0 +1,8 @@
+{
+  "home.title": "Bienvenue sur la démo LLM Translate",
+  "home.lead": "Cette page montre les TagHelpers côté serveur et le changement de langue côté client.",
+  "home.section": "Contenu d'exemple",
+  "home.item1": "Phrase simple à traduire.",
+  "home.item2": "Une autre phrase avec plus de mots.",
+  "home.item3": "Nombres 1, 2, 3 et symboles !?"
+}

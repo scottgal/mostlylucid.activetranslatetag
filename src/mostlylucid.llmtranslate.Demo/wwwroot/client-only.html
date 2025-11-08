@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LLM Translate - Client Only Demo</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css">
+  <script src="/js/translation.client.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      TranslationClient.init({ baseUrl: '/translations', defaultLang: 'en' });
+    });
+  </script>
+  <style>
+    body { padding: 2rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="flex items-center gap-3 mb-4">
+      <span>Language:</span>
+      <div class="join">
+        <button class="btn btn-sm join-item" onclick="TranslationClient.setLanguage('en')">EN</button>
+        <button class="btn btn-sm join-item" onclick="TranslationClient.setLanguage('fr')">FR</button>
+        <button class="btn btn-sm join-item" onclick="TranslationClient.setLanguage('es')">ES</button>
+      </div>
+      <span class="badge" id="current-lang">EN</span>
+    </div>
+
+    <h1 data-translate-key="home.title">Welcome to LLM Translate Demo (Client Only)</h1>
+    <p data-translate-key="home.lead">This page uses only static JSON files and a tiny JS helper.</p>
+
+    <ul>
+      <li data-translate-key="home.item1">Simple sentence to translate.</li>
+      <li data-translate-key="home.item2">Another sentence with more words.</li>
+      <li data-translate-key="home.item3">Numbers 1, 2, 3 and symbols !?</li>
+    </ul>
+  </div>
+</body>
+</html>

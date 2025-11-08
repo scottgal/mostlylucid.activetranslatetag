@@ -1,0 +1,21 @@
+@{
+    ViewData["Title"] = "LLM Translate Demo";
+}
+
+<h1><t key="home.title">Welcome to LLM Translate Demo</t></h1>
+<p>
+    <t key="home.lead">This page demonstrates server-side TagHelpers and client-side language switching.</t>
+</p>
+
+<language-selector></language-selector>
+
+<hr/>
+<h3><t key="home.section">Example Content</t></h3>
+<ul>
+    <li><t key="home.item1">Simple sentence to translate.</t></li>
+    <li><t key="home.item2">Another sentence with more words.</t></li>
+    <li><t key="home.item3">Numbers 1, 2, 3 and symbols !?</t></li>
+</ul>
+
+<!-- Include translation scripts and SignalR client (for OOB updates) -->
+<translation-scripts signalr-hub="/hubs/translation" include-signalr="true" />
