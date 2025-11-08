@@ -42,18 +42,20 @@ app.MapControllerRoute(
 
 app.Run();
 
-// Demo AI provider implementation
+// Demo AI provider implementation (only used if no provider configured in appsettings.json)
 public class DemoEchoAiProvider : IAiTranslationProvider
 {
-    public Task<string> TranslateAsync(string text, string targetLanguage, string? sourceLanguage = "en", CancellationToken ct = default)
+    public Task<string> TranslateAsync(string text, string targetLanguage, string? sourceLanguage = "en", string? description = null, CancellationToken ct = default)
     {
         // For demo purposes, just append [lang]
-        return Task.FromResult($"{text} [{targetLanguage}]");
+        var result = description != null ? $"{text} [{targetLanguage}] ({description})" : $"{text} [{targetLanguage}]";
+        return Task.FromResult(result);
     }
 
-    public Task<Dictionary<string, string>> TranslateBatchAsync(Dictionary<string, string> items, string targetLanguage, string? sourceLanguage = "en", CancellationToken ct = default)
+    public Task<Dictionary<string, string>> TranslateBatchAsync(Dictionary<string, string> items, string targetLanguage, string? sourceLanguage = "en", string? description = null, CancellationToken ct = default)
     {
-        var result = items.ToDictionary(kv => kv.Key, kv => $"{kv.Value} [{targetLanguage}]\u200B");
+        var suffix = description != null ? $" [{targetLanguage}] ({description})" : $" [{targetLanguage}]";
+        var result = items.ToDictionary(kv => kv.Key, kv => $"{kv.Value}{suffix}");
         return Task.FromResult(result);
     }
 }

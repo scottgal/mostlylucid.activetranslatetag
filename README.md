@@ -21,6 +21,145 @@ Auto-translation tag helpers for ASP.NET Core with HTMX integration and AI-power
 dotnet add package mostlylucid.activetranslatetag
 ```
 
+## Quick Start (Configuration-Based)
+
+The easiest way to get started is using the configuration-based setup. Add your settings to `appsettings.json` and call a single setup method.
+
+**appsettings.json:**
+
+```json
+{
+  "LlmTranslate": {
+    "Storage": {
+      "StorageType": "InMemory",
+      "EnableMemoryCache": true,
+      "MemoryCacheDurationMinutes": 60
+    },
+    "Ai": {
+      "DefaultProvider": "easynmt-local",
+      "Chunking": {
+        "Enabled": false,
+        "ChunkLength": 4000,
+        "Overlap": 200
+      },
+      "EasyNmtProviders": [
+        {
+          "Name": "easynmt-local",
+          "BaseUrl": "http://localhost:24080/"
+        }
+      ],
+      "OllamaProviders": [
+        {
+          "Name": "ollama-local",
+          "BaseUrl": "http://localhost:11434/",
+          "Model": "llama3"
+        }
+      ]
+    }
+  }
+}
+```
+
+**Program.cs:**
+
+```csharp
+// Add AutoTranslate from configuration
+builder.Services.AddAutoTranslateFromConfiguration(builder.Configuration);
+
+var app = builder.Build();
+
+// Map the translation endpoints (controllers + SignalR hub)
+app.MapLlmTranslateEndpoints();
+
+app.Run();
+```
+
+This configuration:
+- Uses EasyNMT at port 24080 as the default provider (fast, local, no API keys)
+- Configures Ollama with llama3 as an alternative LLM provider
+- Uses in-memory storage for development (switch to PostgreSQL/SQLite for production)
+- Enables caching for better performance
+
+## Minimal Configuration
+
+If you want the absolute minimal setup without any configuration files, you can register services directly:
+
+**Program.cs (minimal):**
+
+```csharp
+using mostlylucid.activetranslatetag.Extensions;
+using mostlylucid.activetranslatetag.Services;
+using mostlylucid.activetranslatetag.Services.Providers;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddControllersWithViews();
+
+// Minimal setup: in-memory storage only (no AI provider)
+builder.Services.AddAutoTranslate(options =>
+{
+    options.StorageType = TranslationStorageType.InMemory;
+});
+
+var app = builder.Build();
+
+app.UseStaticFiles();
+app.UseRouting();
+
+// Map translation endpoints
+app.MapLlmTranslateEndpoints();
+app.MapControllerRoute(
+    name: "default",
+    pattern: "{controller=Home}/{action=Index}/{id?}");
+
+app.Run();
+```
+
+**_ViewImports.cshtml:**
+
+```cshtml
+@addTagHelper *, mostlylucid.activetranslatetag
+```
+
+**Layout (minimal):**
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My App</title>
+</head>
+<body>
+    <h1 auto-translate="true">Welcome</h1>
+    @RenderBody()
+
+    <translation-scripts />
+</body>
+</html>
+```
+
+That's it! Without an AI provider, translations will be stored but not automatically generated. You can manually add translations via the API or later add a provider.
+
+**To add EasyNMT (recommended):**
+
+```csharp
+// Start EasyNMT server
+// docker run -p 24080:80 easynmt/api:2.0.2-cpu
+
+// Add to Program.cs after AddAutoTranslate
+builder.Services.AddHttpClient<IAiTranslationProvider, EasyNmtTranslationProvider>(client =>
+{
+    client.BaseAddress = new Uri("http://localhost:24080/");
+});
+builder.Services.AddScoped<IAiTranslationProvider>(sp =>
+{
+    var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
+    http.BaseAddress = new Uri("http://localhost:24080/");
+    var logger = sp.GetRequiredService<ILogger<EasyNmtTranslationProvider>>();
+    return new EasyNmtTranslationProvider(http, logger, "http://localhost:24080/");
+});
+```
+
 ## Storage Configuration
 
 ### Option 1: PostgreSQL (Recommended for Production)
@@ -273,36 +412,55 @@ builder.Services.AddScoped<IAiTranslationProvider>(sp =>
 });
 ```
 
-### Ollama (local)
+### Ollama (local LLM) - **Recommended for LLM Translation**
 
-Ensure Ollama is running and a model is pulled (e.g., llama3.2). Default base URL is http://localhost:11434/.
+Run Ollama locally for LLM-powered translation with context awareness. Supports the `description` parameter for better translation quality.
 
-appsettings.json:
+**Why Ollama:**
+- Runs entirely on your hardware
+- No API costs
+- Privacy-focused
+- Supports context via description parameter
+- Access to many open-source models
+
+**Setup:**
+```bash
+# Install Ollama (see https://ollama.ai)
+# Pull the llama3 model
+ollama pull llama3
+```
+
+**appsettings.json:**
 ```json
 {
   "Ollama": {
     "BaseUrl": "http://localhost:11434/",
-    "Model": "llama3.2"
+    "Model": "llama3"
   }
 }
 ```
 
-Environment variables (alternative):
+**Environment variables (alternative):**
 - OLLAMA_BASE_URL (optional, defaults to http://localhost:11434/)
-- OLLAMA_MODEL (optional, defaults to llama3.2)
+- OLLAMA_MODEL (optional, defaults to llama3)
 
-Program.cs registration:
+**Program.cs registration:**
 ```csharp
 builder.Services.AddHttpClient("Ollama", c => c.BaseAddress = new Uri(cfg["Ollama:BaseUrl"] ?? Environment.GetEnvironmentVariable("OLLAMA_BASE_URL") ?? "http://localhost:11434/"));
 builder.Services.AddScoped<IAiTranslationProvider>(sp =>
 {
     var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient("Ollama");
     var logger = sp.GetRequiredService<ILogger<mostlylucid.activetranslatetag.Services.Providers.OllamaTranslationProvider>>();
-    var model = cfg["Ollama:Model"] ?? Environment.GetEnvironmentVariable("OLLAMA_MODEL") ?? "llama3.2";
+    var model = cfg["Ollama:Model"] ?? Environment.GetEnvironmentVariable("OLLAMA_MODEL") ?? "llama3";
     var baseUrl = cfg["Ollama:BaseUrl"] ?? Environment.GetEnvironmentVariable("OLLAMA_BASE_URL");
     return new mostlylucid.activetranslatetag.Services.Providers.OllamaTranslationProvider(http, logger, model, baseUrl);
 });
 ```
+
+**Recommended models:**
+- `llama3` - Good balance of speed and quality
+- `llama3.1` - Improved performance
+- `qwen2.5` - Excellent for multilingual translation
 
 ### LM Studio (local, OpenAI-compatible)
 
@@ -335,16 +493,27 @@ builder.Services.AddScoped<IAiTranslationProvider>(sp =>
 });
 ```
 
-### EasyNMT (local machine translation)
+### EasyNMT (local machine translation) - **Recommended Default**
 
-Run EasyNMT locally for fast, privacy-focused machine translation without API keys.
+Run EasyNMT locally for fast, privacy-focused machine translation without API keys. This is the recommended default provider for most applications.
 
-Docker setup:
+**Why EasyNMT:**
+- No API keys or cloud dependencies
+- Fast translation (typically <1 second)
+- Runs entirely on your infrastructure
+- Supports many language pairs
+- Free and open source
+
+**Docker setup:**
 ```bash
+# CPU version (lighter weight)
 docker run -p 24080:80 easynmt/api:2.0.2-cpu
+
+# GPU version (faster, requires NVIDIA GPU)
+docker run --gpus all -p 24080:80 easynmt/api:2.0.2
 ```
 
-appsettings.json:
+**appsettings.json:**
 ```json
 {
   "EasyNMT": {
@@ -353,7 +522,10 @@ appsettings.json:
 }
 ```
 
-Program.cs registration:
+**Environment variables (alternative):**
+- EASYNMT_BASE_URL (optional, defaults to http://localhost:24080/)
+
+**Program.cs registration:**
 ```csharp
 builder.Services.AddHttpClient("EasyNMT");
 builder.Services.AddScoped<IAiTranslationProvider>(sp =>
@@ -364,6 +536,8 @@ builder.Services.AddScoped<IAiTranslationProvider>(sp =>
     return new mostlylucid.activetranslatetag.Services.Providers.EasyNmtTranslationProvider(http, logger, baseUrl);
 });
 ```
+
+**Note:** EasyNMT is a machine translation provider and does not support the `description` parameter (used for providing context to LLM providers).
 
 Switching providers: register only one IAiTranslationProvider at a time, or use named registrations and a small adapter to pick one via config.
 
@@ -409,6 +583,28 @@ Automatically translates any HTML element:
 </button>
 ```
 
+**With description parameter (LLM providers only):**
+
+The `translation-description` attribute provides context to LLM providers (like Ollama, OpenAI, Azure) to improve translation quality. Machine translation providers (EasyNMT, CTranslate2) ignore this parameter.
+
+```html
+<h1 auto-translate="true"
+    translation-description="Main headline for tech startup homepage">
+    Revolutionize Your Workflow
+</h1>
+
+<p auto-translate="true"
+   translation-category="marketing"
+   translation-description="Value proposition for B2B customers">
+    Streamline operations and boost productivity with our AI-powered platform.
+</p>
+
+<button auto-translate="true"
+        translation-description="Call-to-action button for free trial signup">
+    Start Free Trial
+</button>
+```
+
 ### 2. Manual Translation Tag Helper
 
 Use explicit translation keys:
@@ -418,6 +614,33 @@ Use explicit translation keys:
 <t key="nav.home" category="navigation">Home</t>
 <t key="greeting" lang="es">Hello</t>
 ```
+
+**With description parameter (LLM providers only):**
+
+```html
+<t key="home.hero"
+   description="Marketing slogan for tech startup targeting developers">
+    Build faster, ship smarter
+</t>
+
+<t key="pricing.cta"
+   description="Pricing page call-to-action for enterprise customers">
+    Contact Sales
+</t>
+
+<t key="nav.features"
+   category="navigation"
+   description="Navigation link to product features page">
+    Features
+</t>
+```
+
+**When to use description:**
+- Marketing copy that needs tone/style matching
+- Domain-specific terminology (legal, medical, technical)
+- Culturally-sensitive content
+- Ambiguous phrases that could be translated multiple ways
+- Brand voice consistency across languages
 
 ### 3. Language Selector
 
@@ -543,6 +766,191 @@ Add to your layout (before closing `</body>` tag):
 | **SQLite** | Small apps, development | Simple setup, file-based, portable | Not for high concurrency |
 | **JSON File** | Static sites, dev, version control | Human-readable, portable, no DB required | Slower for large datasets |
 
+## Complete Configuration Reference
+
+### Configuration-Based Setup (appsettings.json)
+
+The `AddAutoTranslateFromConfiguration` method reads settings from the `LlmTranslate` section of your configuration.
+
+**Complete appsettings.json example with all options:**
+
+```json
+{
+  "LlmTranslate": {
+    "Storage": {
+      "StorageType": "PostgreSql",
+      "ConnectionString": "Host=localhost;Database=myapp;Username=postgres;Password=secret",
+      "PostgreSqlSchema": "translations",
+      "JsonFilePath": "App_Data/translations.json",
+      "JsonAutoSave": true,
+      "EnableMemoryCache": true,
+      "MemoryCacheDurationMinutes": 60
+    },
+    "Ai": {
+      "DefaultProvider": "easynmt-local",
+      "Chunking": {
+        "Enabled": false,
+        "ChunkLength": 4000,
+        "Overlap": 200
+      },
+      "EasyNmtProviders": [
+        {
+          "Name": "easynmt-local",
+          "BaseUrl": "http://localhost:24080/"
+        },
+        {
+          "Name": "easynmt-remote",
+          "BaseUrl": "https://translate.example.com/"
+        }
+      ],
+      "CTranslate2Providers": [
+        {
+          "Name": "ctranslate2-local",
+          "BaseUrl": "http://localhost:5000/"
+        }
+      ],
+      "OllamaProviders": [
+        {
+          "Name": "ollama-local",
+          "BaseUrl": "http://localhost:11434/",
+          "Model": "llama3"
+        },
+        {
+          "Name": "ollama-qwen",
+          "BaseUrl": "http://localhost:11434/",
+          "Model": "qwen2.5"
+        }
+      ],
+      "OpenAiProviders": [
+        {
+          "Name": "openai-gpt4o",
+          "ApiKey": "${OPENAI_API_KEY}",
+          "Model": "gpt-4o-mini"
+        }
+      ],
+      "AzureAiProviders": [
+        {
+          "Name": "azure-gpt4",
+          "Endpoint": "https://your-resource.openai.azure.com",
+          "ApiKey": "${AZURE_OPENAI_API_KEY}",
+          "Deployment": "gpt-4o-mini",
+          "ApiVersion": "2024-06-01"
+        }
+      ],
+      "LmStudioProviders": [
+        {
+          "Name": "lmstudio-local",
+          "BaseUrl": "http://localhost:1234/",
+          "Model": "qwen2.5:latest"
+        }
+      ]
+    }
+  }
+}
+```
+
+### Configuration Options Reference
+
+#### Storage Section
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `StorageType` | string | `InMemory` | Storage backend: `InMemory`, `PostgreSql`, `Sqlite`, `JsonFile` |
+| `ConnectionString` | string | null | Database connection string (required for PostgreSQL/SQLite) |
+| `PostgreSqlSchema` | string | `"public"` | PostgreSQL schema name for translation tables |
+| `JsonFilePath` | string | null | Path to JSON file (required for JsonFile storage) |
+| `JsonAutoSave` | bool | `true` | Auto-save changes to JSON file immediately |
+| `EnableMemoryCache` | bool | `true` | Enable in-memory caching for faster lookups |
+| `MemoryCacheDurationMinutes` | int | `60` | How long to cache translations in memory |
+
+#### AI Section
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `DefaultProvider` | string | null | Name of the default provider to use (must match a provider Name) |
+
+#### Chunking Settings
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `Enabled` | bool | `false` | Enable text chunking for large documents |
+| `ChunkLength` | int | `4000` | Maximum characters per chunk |
+| `Overlap` | int | `200` | Character overlap between chunks |
+
+#### Provider Configurations
+
+Each provider type has an array of provider configurations. All providers share:
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `Name` | string | Yes | Unique identifier for this provider instance |
+
+**EasyNmtProviders / CTranslate2Providers:**
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `BaseUrl` | string | Yes | Base URL of the translation server |
+
+**OllamaProviders:**
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `BaseUrl` | string | No | Ollama server URL (default: http://localhost:11434/) |
+| `Model` | string | Yes | Model name (e.g., llama3, qwen2.5) |
+
+**OpenAiProviders:**
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `ApiKey` | string | Yes | OpenAI API key |
+| `Model` | string | Yes | Model name (e.g., gpt-4o-mini) |
+
+**AzureAiProviders:**
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `Endpoint` | string | Yes | Azure OpenAI resource endpoint |
+| `ApiKey` | string | Yes | Azure OpenAI API key |
+| `Deployment` | string | Yes | Deployment name |
+| `ApiVersion` | string | No | API version (default: 2024-06-01) |
+
+**LmStudioProviders:**
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `BaseUrl` | string | No | LM Studio server URL (default: http://localhost:1234/) |
+| `Model` | string | Yes | Model name loaded in LM Studio |
+
+### Using Environment Variables
+
+Sensitive values like API keys should be stored in environment variables or user secrets:
+
+```json
+{
+  "LlmTranslate": {
+    "Ai": {
+      "OpenAiProviders": [
+        {
+          "Name": "openai",
+          "ApiKey": "${OPENAI_API_KEY}",
+          "Model": "gpt-4o-mini"
+        }
+      ]
+    }
+  }
+}
+```
+
+Then set the environment variable:
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+Or use .NET User Secrets:
+```bash
+dotnet user-secrets set "OPENAI_API_KEY" "sk-..."
+```
+
 ## Advanced Configuration
 
 ### Custom Cache Settings
@@ -629,6 +1037,76 @@ dotnet ef migrations add Initial --context TranslationDbContext
 1. Ensure `app.MapAutoTranslateHub()` is called
 2. Check hub path matches: `<translation-scripts signalr-hub="/hubs/translation" />`
 3. Verify SignalR CDN is accessible
+
+### EasyNMT / mostlylucid-nmt Issues
+
+**Translations returning unchanged text:**
+
+1. Verify server is running:
+```bash
+curl http://localhost:24080/translate \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Hello","target_lang":"es","source_lang":""}'
+```
+
+Expected response format:
+```json
+{
+  "translated": ["Hola"]
+}
+```
+
+2. Check server logs for errors
+3. Ensure `source_lang` is empty string (not null) for auto-detection
+4. Verify language codes are ISO 639-1 (e.g., en, es, fr, de)
+
+**Docker container issues:**
+
+```bash
+# Check if container is running
+docker ps
+
+# View container logs
+docker logs <container-id>
+
+# Restart container
+docker restart <container-id>
+
+# Run with explicit port mapping
+docker run -p 24080:80 easynmt/api:2.0.2-cpu
+```
+
+**Response format compatibility:**
+
+The mostlylucid-nmt server uses `"translated": [...]` (array format). If using a different EasyNMT server that returns `"translation": "..."` (string format), the provider will auto-detect and handle both formats.
+
+### Ollama Issues
+
+**Model not found:**
+
+```bash
+# List available models
+ollama list
+
+# Pull the model
+ollama pull llama3
+```
+
+**Connection refused:**
+
+```bash
+# Check Ollama is running
+ollama serve
+
+# Or check the service status (Linux)
+systemctl status ollama
+```
+
+**Slow translation:**
+
+- Use smaller models (llama3 instead of llama3.1:70b)
+- Enable GPU acceleration if available
+- Reduce concurrent requests
 
 ## Performance Tips
 

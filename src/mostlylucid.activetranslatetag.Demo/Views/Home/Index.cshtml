@@ -2,20 +2,70 @@
     ViewData["Title"] = "LLM Translate Demo";
 }
 
-<h1><t key="home.title">Welcome to LLM Translate Demo</t></h1>
-<p>
-    <t key="home.lead">This page demonstrates server-side TagHelpers and client-side language switching.</t>
-</p>
+<div class="container mt-4">
+    <h1><t key="home.title" description="Page title for translation demo application">Welcome to LLM Translate Demo</t></h1>
+    <p class="lead">
+        <t key="home.lead" description="Introduction paragraph explaining the demo features">This page demonstrates server-side TagHelpers and client-side language switching with EasyNMT and Ollama.</t>
+    </p>
 
-<language-selector></language-selector>
+    <language-selector></language-selector>
 
-<hr/>
-<h3><t key="home.section">Example Content</t></h3>
-<ul>
-    <li><t key="home.item1">Simple sentence to translate.</t></li>
-    <li><t key="home.item2">Another sentence with more words.</t></li>
-    <li><t key="home.item3">Numbers 1, 2, 3 and symbols !?</t></li>
-</ul>
+    <hr/>
+
+    <h3><t key="home.section" description="Section heading for example translations">Example Translations</t></h3>
+
+    <div class="card mb-3">
+        <div class="card-header">Basic Translations</div>
+        <div class="card-body">
+            <ul>
+                <li><t key="home.item1">Simple sentence to translate.</t></li>
+                <li><t key="home.item2">Another sentence with more words.</t></li>
+                <li><t key="home.item3">Numbers 1, 2, 3 and symbols !?</t></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header">Translations with Context (LLM providers only)</div>
+        <div class="card-body">
+            <p>
+                <t key="home.marketing.cta"
+                   description="Call-to-action button for tech startup targeting developers">
+                    Start Building Today
+                </t>
+            </p>
+            <p>
+                <t key="home.feature.ai"
+                   description="Product feature description for AI-powered translation service">
+                    Leverage cutting-edge AI to translate your content with context awareness.
+                </t>
+            </p>
+            <p>
+                <t key="home.pricing.enterprise"
+                   description="Enterprise pricing tier call-to-action for B2B customers">
+                    Contact us for enterprise pricing
+                </t>
+            </p>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header">Auto-Translate Elements</div>
+        <div class="card-body">
+            <h4 auto-translate="true"
+                translation-description="Section heading about configuration">
+                Configuration Options
+            </h4>
+            <p auto-translate="true"
+               translation-category="technical"
+               translation-description="Technical documentation about default provider">
+                The default provider is set to EasyNMT running on port 24080. You can switch to Ollama by changing the DefaultProvider setting.
+            </p>
+        </div>
+    </div>
+
+    <translation-status position="top-right" show-details="true" />
+</div>
 
 <!-- Include translation scripts and SignalR client (for OOB updates) -->
-<translation-scripts signalr-hub="/hubs/translation" include-signalr="true" />
+<translation-scripts signalr-hub="/hubs/translation" include-signalr="true" debug="true" />
