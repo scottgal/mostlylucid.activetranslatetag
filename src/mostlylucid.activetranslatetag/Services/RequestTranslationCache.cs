@@ -25,11 +25,12 @@ public class RequestTranslationCache
     {
         lock (_lock)
         {
-            if (!_cache.ContainsKey(languageCode))
+            if (!_cache.TryGetValue(languageCode, out var languageCache))
             {
-                _cache[languageCode] = new Dictionary<string, string>();
+                languageCache = new Dictionary<string, string>();
+                _cache[languageCode] = languageCache;
             }
-            _cache[languageCode][key] = value;
+            languageCache[key] = value;
         }
     }
 

@@ -111,7 +111,7 @@ public partial class AutoTranslateTagHelper : TagHelper
         var translationKey = GenerateTranslationKey(textForKey, Category);
 
         // Get or create translation using the plain text
-        var translatedText = await _translator.T(translationKey, textForTranslation, Description);
+        var translatedText = await _translator.T(translationKey, defaultText: textForTranslation, description: Description);
 
         // Restore HTML tags if we stripped them
         if (tagMap != null && tagMap.Count > 0)

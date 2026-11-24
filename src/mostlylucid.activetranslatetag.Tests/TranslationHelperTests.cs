@@ -20,7 +20,7 @@ public class TranslationHelperTests
         var mockCookies = new Mock<IRequestCookieCollection>();
         var mockHeaders = new HeaderDictionary();
 
-        mockCookies.Setup(c => c.TryGetValue(It.IsAny<string>(), out It.Ref<string>.IsAny)).Returns(false);
+        mockCookies.Setup(c => c.TryGetValue(It.IsAny<string>(), out It.Ref<string?>.IsAny)).Returns(false);
         mockRequest.Setup(r => r.Cookies).Returns(mockCookies.Object);
         mockRequest.Setup(r => r.Headers).Returns(mockHeaders);
         mockHttpContext.Setup(c => c.Request).Returns(mockRequest.Object);
@@ -74,7 +74,7 @@ public class TranslationHelperTests
             { "Accept-Language", "de-DE,de;q=0.9,en;q=0.8" }
         };
 
-        mockCookies.Setup(c => c.TryGetValue(It.IsAny<string>(), out It.Ref<string>.IsAny)).Returns(false);
+        mockCookies.Setup(c => c.TryGetValue(It.IsAny<string>(), out It.Ref<string?>.IsAny)).Returns(false);
         mockRequest.Setup(r => r.Cookies).Returns(mockCookies.Object);
         mockRequest.Setup(r => r.Headers).Returns(mockHeaders);
         mockHttpContext.Setup(c => c.Request).Returns(mockRequest.Object);
@@ -118,7 +118,7 @@ public class TranslationHelperTests
         var mockCookies = new Mock<IRequestCookieCollection>();
         var mockHeaders = new HeaderDictionary();
 
-        mockCookies.Setup(c => c.TryGetValue(It.IsAny<string>(), out It.Ref<string>.IsAny)).Returns(false);
+        mockCookies.Setup(c => c.TryGetValue(It.IsAny<string>(), out It.Ref<string?>.IsAny)).Returns(false);
         mockRequest.Setup(r => r.Cookies).Returns(mockCookies.Object);
         mockRequest.Setup(r => r.Headers).Returns(mockHeaders);
         mockHttpContext.Setup(c => c.Request).Returns(mockRequest.Object);
@@ -151,7 +151,7 @@ public class TranslationHelperTests
         var mockCookies = new Mock<IRequestCookieCollection>();
         var mockHeaders = new HeaderDictionary();
 
-        mockCookies.Setup(c => c.TryGetValue(It.IsAny<string>(), out It.Ref<string>.IsAny)).Returns(false);
+        mockCookies.Setup(c => c.TryGetValue(It.IsAny<string>(), out It.Ref<string?>.IsAny)).Returns(false);
         mockRequest.Setup(r => r.Cookies).Returns(mockCookies.Object);
         mockRequest.Setup(r => r.Headers).Returns(mockHeaders);
         mockHttpContext.Setup(c => c.Request).Returns(mockRequest.Object);
@@ -175,8 +175,7 @@ public class TranslationHelperTests
         result.Should().Be("Test Translation");
         callCount.Should().Be(1);
 
-        // Note: EnsureStringAsync is called in a fire-and-forget Task.Run, so we can't verify it directly
-        // in a reliable way without adding delays
+        mockTranslationService.Verify(s => s.EnsureStringAsync("test.key", "Default Text", null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -222,7 +221,7 @@ public class TranslationHelperTests
         var helper = new TranslationHelper(mockTranslationService.Object, mockHttpContextAccessor.Object);
 
         // Act
-        var result = await helper.T("test.key", "es", "Default Text");
+        var result = await helper.T("test.key", languageCode: "es", defaultText: "Default Text");
 
         // Assert
         result.Should().Be("Spanish Translation");

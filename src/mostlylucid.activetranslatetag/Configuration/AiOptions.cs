@@ -40,7 +40,7 @@ public class ChunkingOptions
     /// <summary>
     /// Enable chunking decorator.
     /// </summary>
-    public bool Enabled { get; set; } = false;
+    public bool Enabled { get; set; }
 
     /// <summary>
     /// Maximum length of each chunk (characters). Defaults to 800 if not specified.
@@ -50,7 +50,7 @@ public class ChunkingOptions
     /// <summary>
     /// Overlap (characters) between consecutive chunks to improve continuity. Defaults to 0.
     /// </summary>
-    public int Overlap { get; set; } = 0;
+    public int Overlap { get; set; }
 }
 
 /// <summary>

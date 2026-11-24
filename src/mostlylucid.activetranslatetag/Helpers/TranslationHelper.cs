@@ -59,17 +59,7 @@ public class TranslationHelper
         // If default text provided and key doesn't exist, ensure it's registered
         if (defaultText != null)
         {
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await _translationService.EnsureStringAsync(key, defaultText, context: description);
-                }
-                catch
-                {
-                    // Best effort - don't block rendering
-                }
-            });
+            await _translationService.EnsureStringAsync(key, defaultText, context: description);
         }
 
         return await _translationService.GetAsync(key, language);
@@ -86,17 +76,7 @@ public class TranslationHelper
     {
         if (defaultText != null)
         {
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await _translationService.EnsureStringAsync(key, defaultText, context: description);
-                }
-                catch
-                {
-                    // Best effort
-                }
-            });
+            await _translationService.EnsureStringAsync(key, defaultText, context: description);
         }
 
         return await _translationService.GetAsync(key, languageCode);

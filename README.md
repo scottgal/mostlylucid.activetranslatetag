@@ -1,1142 +1,211 @@
-# mostlylucid.activetranslatetag
+# Active translation: Tag Helpers, View Components, and HTMX 4
 
-**Active Translation Tag Helpers** - An open-source AI-powered translation system for ASP.NET Core from [mostlylucid.net](https://www.mostlylucid.net).
+An ASP.NET Core tutorial using translation to demonstrate **dynamic content replacement**.
+A forum message renders immediately in its original language. A small generative LLM translates
+it in a hosted worker. SignalR announces that the translation is available; HTMX fetches that
+single HTML fragment and swaps it in.
 
-Auto-translation tag helpers for ASP.NET Core with HTMX integration and AI-powered translations. Automatically translates UI strings and user content with real-time updates via SignalR.
-
-## Features
-
-- **Multiple Storage Options**: PostgreSQL (with schema support), SQLite, or JSON file storage
-- **Tag Helper Integration**: Automatically translate any HTML element or use manual translation keys
-- **HTMX OOB Swaps**: Efficient language switching without page reloads
-- **AI-Powered Translation**: Pluggable AI translation provider interface
-- **Real-time Updates**: SignalR integration for live translation progress
-- **UI Components**: Built-in language selector and status display tag helpers
-- **Multi-level Caching**: Request-scoped, memory cache, and persistent storage
-- **Deterministic IDs**: Hash-based element IDs for reliable HTMX targeting
-
-## Installation
-
-```bash
-dotnet add package mostlylucid.activetranslatetag
+```cshtml
+<active-translate language="fr" source-language="en" description="An informal forum reply">
+    <p>@Model.Message</p>
+</active-translate>
 ```
 
-## Quick Start (Configuration-Based)
+Razor encodes `Model.Message` as usual. No JavaScript call, translation key, or database ID is required.
 
-The easiest way to get started is using the configuration-based setup. Add your settings to `appsettings.json` and call a single setup method.
+## Run the example
 
-**appsettings.json:**
+Requires the .NET 11 SDK (11.0.100 or a later .NET 11 SDK) and Node.js.
 
-```json
-{
-  "LlmTranslate": {
-    "Storage": {
-      "StorageType": "InMemory",
-      "EnableMemoryCache": true,
-      "MemoryCacheDurationMinutes": 60
-    },
-    "Ai": {
-      "DefaultProvider": "easynmt-local",
-      "Chunking": {
-        "Enabled": false,
-        "ChunkLength": 4000,
-        "Overlap": 200
-      },
-      "EasyNmtProviders": [
-        {
-          "Name": "easynmt-local",
-          "BaseUrl": "http://localhost:24080/"
-        }
-      ],
-      "OllamaProviders": [
-        {
-          "Name": "ollama-local",
-          "BaseUrl": "http://localhost:11434/",
-          "Model": "llama3"
-        }
-      ]
-    }
-  }
-}
+```sh
+npm ci
+npm run build
+dotnet run --project src/mostlylucid.activetranslatetag.Demo
 ```
 
-**Program.cs:**
+The default **Sample** provider contains fixed French examples. It deliberately delays responses
+so you can see the active swaps; it does not run a model or claim translation quality.
+Refresh after completion to see SQLite cache hits render immediately.
+
+```sh
+dotnet test 'mostlylucid.activetranslatetag .sln'
+npm test
+```
+
+Historical EasyNMT live-server tests are skipped. No conventional machine translation engine
+is used by this example. Older provider/storage classes remain for reference; the active path
+below has its own direct SQLite store and hosted queue.
+
+## Part 1: server rendering and View Components
+
+`ActiveTranslateTagHelper` captures the Razor child content and delegates to `ActiveTranslateViewComponent`.
+The component preserves original markup with placeholders and builds a SHA-256 key from source content, languages, description and model/prompt
+cache namespace. Add `mode="server"` to wait for the translated result during rendering:
+
+```cshtml
+<active-translate language="fr" mode="server"><p>Hello, forum!</p></active-translate>
+@await Component.InvokeAsync("ActiveTranslationStatus")
+```
+
+The custom Tag Helper is a small adapter to the View Component; the component prepares the view model,
+and its `Default.cshtml` owns the wrapper markup. The separate status component demonstrates the built-in
+`<vc:active-translation-status>` syntax. A parameter-driven component can use built-in `<vc:...>` directly;
+a custom wrapper remains useful when capturing arbitrary child Razor content. The default `active` mode avoids waiting for inference in the HTTP response.
+Cached content is immediate in either mode. A provider failure retains the original content.
+
+## Part 2: active fragments with HTMX 4 + SignalR
+
+For an uncached message, the Tag Helper emits a wrapper like:
+
+```html
+<div id="translation-unique-instance"
+     data-translation-id="content-and-language-hash"
+     data-translation-token="short-lived-protected-capability"
+     hx-get="/_active-translate/fragment?token=..."
+     hx-trigger="translation-ready"
+     hx-swap="innerHTML"
+     hx-sync="this:replace"
+     aria-live="polite" aria-busy="true">
+    <p>Hello, forum!</p>
+</div>
+```
+
+1. The helper records the source in SQLite and queues its content key. Repeated content shares one job.
+2. The browser connects to `ActiveTranslationHub` and watches that protected capability.
+3. The hosted worker creates a DI scope, runs inference, validates placeholders and saves the HTML.
+4. SignalR sends **only an ID**, to connections watching that ID. It sends neither model output nor forum text.
+5. The small client bridge triggers `translation-ready` on every matching wrapper.
+6. **HTMX**, not the bridge, issues the GET and swaps the returned HTML.
+
+The worker uses a C# 15 union for ready and failed results. A typed SignalR client contract keeps those notifications consistent between the worker and the hub. The hub only subscribes and reports status. The browser fetches the completed HTML from a read-only Minimal API GET. Only the Razor render path queues inference.
+
+The hub joins the group before rechecking SQLite. This closes the render/connect race and recovers
+missed completion events after reconnect. A MutationObserver subscribes posts added after page load
+and removes subscriptions for detached posts. Each occurrence has its own DOM ID.
+
+HTMX and SignalR are pinned npm dependencies copied locally by `npm run build`; no floating CDN versions.
+HTMX 4 uses explicit per-element request attributes, including `hx-sync="this:replace"`.
+See [HTMX 4 changes](https://four.htmx.org/docs/whats-new-in-htmx-4/).
+
+## Host integration
 
 ```csharp
-// Add AutoTranslate from configuration
-builder.Services.AddAutoTranslateFromConfiguration(builder.Configuration);
-
-var app = builder.Build();
-
-// Map the translation endpoints (controllers + SignalR hub)
-app.MapLlmTranslateEndpoints();
-
-app.Run();
-```
-
-This configuration:
-- Uses EasyNMT at port 24080 as the default provider (fast, local, no API keys)
-- Configures Ollama with llama3 as an alternative LLM provider
-- Uses in-memory storage for development (switch to PostgreSQL/SQLite for production)
-- Enables caching for better performance
-
-## Minimal Configuration
-
-If you want the absolute minimal setup without any configuration files, you can register services directly:
-
-**Program.cs (minimal):**
-
-```csharp
-using mostlylucid.activetranslatetag.Extensions;
-using mostlylucid.activetranslatetag.Services;
-using mostlylucid.activetranslatetag.Services.Providers;
-
-var builder = WebApplication.CreateBuilder(args);
-
+builder.WebHost.UseStaticWebAssets(); // Referenced RCL assets when running build output.
 builder.Services.AddControllersWithViews();
-
-// Minimal setup: in-memory storage only (no AI provider)
-builder.Services.AddAutoTranslate(options =>
+builder.Services.AddActiveTranslation(options =>
 {
-    options.StorageType = TranslationStorageType.InMemory;
+    options.DatabasePath = Path.Combine(builder.Environment.ContentRootPath, "App_Data/translations.db");
+    options.CacheNamespace = "qwen3-1.7b-q4-prompt-v1";
 });
+// Register exactly one IAiTranslationProvider (examples below).
 
 var app = builder.Build();
-
 app.UseStaticFiles();
-app.UseRouting();
-
-// Map translation endpoints
-app.MapLlmTranslateEndpoints();
-app.MapControllerRoute(
-    name: "default",
-    pattern: "{controller=Home}/{action=Index}/{id?}");
-
+app.MapStaticAssets();
+app.MapActiveTranslation(); // Maps the fragment GET and the SignalR hub.
+app.MapControllerRoute("default", "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 ```
 
-**_ViewImports.cshtml:**
+Put `@addTagHelper *, mostlylucid.activetranslatetag` in **Views/_ViewImports.cshtml**.
+Load the host's pinned HTMX and SignalR clients, then the RCL bridge:
 
 ```cshtml
-@addTagHelper *, mostlylucid.activetranslatetag
+<script src="~/lib/htmx/htmx.min.js" defer></script>
+<script src="~/lib/signalr/signalr.min.js" defer></script>
+<script src="~/_content/mostlylucid.activetranslatetag/js/active-translation.js"
+        data-active-translation-hub="@Url.Content("~/_active-translate/hub")" defer></script>
 ```
 
-**Layout (minimal):**
+The fragment/hub use short-lived Data Protection capabilities for content already rendered by Razor.
+Keep authentication and forum access checks on the original page. Capabilities are bearer links:
+do not share them beyond the audience allowed to see that content. Persist Data Protection keys
+if capabilities must survive application restarts; the SQLite translations themselves already do.
 
-```html
-<!DOCTYPE html>
-<html>
-<head>
-    <title>My App</title>
-</head>
-<body>
-    <h1 auto-translate="true">Welcome</h1>
-    @RenderBody()
+## Tiny generative LLMs
 
-    <translation-scripts />
-</body>
-</html>
+The adapters intentionally target **Qwen3's non-thinking template**, rather than silently applying
+one chat format to every model family. Translation quality, throughput and memory use must be
+measured on the actual languages, hardware and quantization.
+
+| Candidate | Role | License / integration |
+| --- | --- | --- |
+| [Qwen3 0.6B](https://huggingface.co/Qwen/Qwen3-0.6B) | Smallest baseline for short messages | Apache 2.0; Qwen3 GGUF or compatible GenAI ONNX export |
+| [Qwen3.5 0.8B](https://huggingface.co/Qwen/Qwen3.5-0.8B) | Newer tiny candidate | Apache 2.0; use Ollama while in-process architecture/template support is evaluated |
+| [Qwen3 1.7B](https://huggingface.co/Qwen/Qwen3-1.7B) | Next candidate to compare with 0.6B | Apache 2.0; same adapter |
+| [TranslateGemma 4B](https://huggingface.co/google/translategemma-4b-it) | Translation-tuned, larger comparison model | Gemma terms; needs its own input/template adapter, not implemented |
+
+### Ollama: easiest real-model setup
+
+```sh
+ollama pull qwen3:1.7b
+dotnet run --project src/mostlylucid.activetranslatetag.Demo --   --Translation:Provider=Ollama --Translation:CacheNamespace=qwen3-1.7b-ollama-v1
 ```
 
-That's it! Without an AI provider, translations will be stored but not automatically generated. You can manually add translations via the API or later add a provider.
+The active Ollama provider uses `/api/chat`, `think: false`, bounded output and explicit errors.
+It does not cache a failed HTTP request as a successful source-language translation.
 
-**To add EasyNMT (recommended):**
+### LLamaSharp: inference inside .NET
 
-```csharp
-// Start EasyNMT server
-// docker run -p 24080:80 easynmt/api:2.0.2-cpu
+The optional `mostlylucid.activetranslatetag.LLamaSharp` project loads Qwen3 GGUF weights once,
+serializes inference and creates a fresh context per message. The demo installs the CPU backend;
+choose the matching LLamaSharp native backend for CUDA/Vulkan/Metal deployments.
 
-// Add to Program.cs after AddAutoTranslate
-builder.Services.AddHttpClient<IAiTranslationProvider, EasyNmtTranslationProvider>(client =>
-{
-    client.BaseAddress = new Uri("http://localhost:24080/");
-});
-builder.Services.AddScoped<IAiTranslationProvider>(sp =>
-{
-    var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
-    http.BaseAddress = new Uri("http://localhost:24080/");
-    var logger = sp.GetRequiredService<ILogger<EasyNmtTranslationProvider>>();
-    return new EasyNmtTranslationProvider(http, logger, "http://localhost:24080/");
-});
+```sh
+dotnet run --project src/mostlylucid.activetranslatetag.Demo --   --Translation:Provider=LLamaSharp   --Translation:LLamaSharp:ModelPath=/absolute/path/Qwen3-1.7B-Q4_K_M.gguf   --Translation:CacheNamespace=qwen3-1.7b-q4km-v1
 ```
 
-## Storage Configuration
+Model files are local configuration, never committed or automatically downloaded.
+See [LLamaSharp](https://github.com/SciSharp/LLamaSharp).
 
-### Option 1: PostgreSQL (Recommended for Production)
+### ONNX Runtime GenAI: optional adapter
 
-**With default schema (public):**
+`mostlylucid.activetranslatetag.Onnx` uses the generative C# API, not a conventional translation model.
+Supply a **Qwen3 GenAI-compatible model directory**, including `genai_config.json`, matching tokenizer
+and weights. An arbitrary `.onnx` export is insufficient. Verify the export's architecture, native
+runtime/platform support, context size and quantization before selecting this provider.
 
-```csharp
-builder.Services.AddAutoTranslateWithPostgreSql(
-    builder.Configuration.GetConnectionString("DefaultConnection")
-);
+```sh
+dotnet run --project src/mostlylucid.activetranslatetag.Demo --   --Translation:Provider=Onnx   --Translation:Onnx:ModelDirectory=/absolute/path/qwen3-genai   --Translation:CacheNamespace=qwen3-onnx-export-v1
 ```
 
-**With custom schema:**
+The ONNX GenAI API is marked preview upstream. The adapter is optional; its model compatibility
+is not established by a successful build. See [C# API](https://onnxruntime.ai/docs/genai/api/csharp.html).
 
-```csharp
-builder.Services.AddAutoTranslateWithPostgreSql(
-    connectionString: builder.Configuration.GetConnectionString("DefaultConnection"),
-    schema: "translations"  // Custom schema name
-);
+A reproducible structural smoke check against models already installed in Ollama is available:
+
+```sh
+python3 scripts/evaluate-ollama.py --models qwen3:1.7b qwen3.5:0.8b
 ```
 
-**Using configuration options:**
-
-```csharp
-builder.Services.AddAutoTranslate(options =>
-{
-    options.StorageType = TranslationStorageType.PostgreSql;
-    options.ConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-    options.PostgreSqlSchema = "translations"; // Optional, defaults to "public"
-    options.EnableMemoryCache = true;
-    options.MemoryCacheDurationMinutes = 60;
-});
-```
-
-**Connection string example:**
-
-```json
-{
-  "ConnectionStrings": {
-    "DefaultConnection": "Host=localhost;Database=myapp;Username=postgres;Password=secret"
-  }
-}
-```
-
-**Run migrations:**
-
-```bash
-dotnet ef migrations add InitialTranslation --context TranslationDbContext
-dotnet ef database update --context TranslationDbContext
-```
-
-### Option 2: SQLite (Great for Development/Small Apps)
-
-**Basic setup:**
-
-```csharp
-builder.Services.AddAutoTranslateWithSqlite(
-    "Data Source=translations.db"
-);
-```
-
-**With configuration options:**
-
-```csharp
-builder.Services.AddAutoTranslate(options =>
-{
-    options.StorageType = TranslationStorageType.Sqlite;
-    options.ConnectionString = "Data Source=translations.db;Cache=Shared";
-    options.EnableMemoryCache = true;
-    options.MemoryCacheDurationMinutes = 120; // Longer cache for file-based DB
-});
-```
-
-**Run migrations:**
-
-```bash
-dotnet ef migrations add InitialTranslation --context TranslationDbContext
-dotnet ef database update --context TranslationDbContext
-```
-
-### Option 3: JSON File (Simple/Portable)
-
-Perfect for:
-- Static site generation
-- Version control of translations
-- Simple deployments
-- Development/testing
-
-```csharp
-builder.Services.AddAutoTranslateWithJsonFile(
-    filePath: "App_Data/translations.json",
-    autoSave: true  // Auto-save changes immediately
-);
-```
-
-**With configuration options:**
-
-```csharp
-builder.Services.AddAutoTranslate(options =>
-{
-    options.StorageType = TranslationStorageType.JsonFile;
-    options.JsonFilePath = Path.Combine(builder.Environment.ContentRootPath, "translations.json");
-    options.JsonAutoSave = true; // Save after each change
-    options.EnableMemoryCache = true;
-    options.MemoryCacheDurationMinutes = 30;
-});
-```
-
-**JSON file structure:**
-
-```json
-{
-  "strings": [
-    {
-      "id": 1,
-      "key": "home.welcome",
-      "defaultText": "Welcome to our site",
-      "category": "Home",
-      "context": "Main page greeting",
-      "translations": [
-        {
-          "id": 1,
-          "languageCode": "es",
-          "translatedText": "Bienvenido a nuestro sitio",
-          "source": 1,
-          "aiModel": "gpt-4"
-        },
-        {
-          "id": 2,
-          "languageCode": "fr",
-          "translatedText": "Bienvenue sur notre site",
-          "source": 1
-        }
-      ]
-    }
-  ]
-}
-```
-
-### Option 4: Existing DbContext
-
-If you already have a DbContext, make it implement `ITranslationDbContext`:
-
-```csharp
-public class ApplicationDbContext : DbContext, ITranslationDbContext
-{
-    public DbSet<TranslationString> TranslationStrings => Set<TranslationString>();
-    public DbSet<Translation> Translations => Set<Translation>();
-
-    // ... your other DbSets
-}
-```
-
-Then register:
-
-```csharp
-builder.Services.AddAutoTranslateWithExistingDbContext<ApplicationDbContext>();
-```
-
-## Built-in AI Translation Providers
-
-The package ships with ready-to-use providers. Pick one, add minimal configuration, and register it for IAiTranslationProvider.
-
-Supported built-ins:
-- OpenAI (hosted)
-- Azure OpenAI (Azure AI) Chat Completions
-- Ollama (local LLM)
-- LM Studio (local, OpenAI-compatible)
-- EasyNMT (local machine translation)
-
-General registration pattern (Program.cs):
-
-```csharp
-// Select ONE provider registration below
-builder.Services.AddAutoTranslateWithSqlite("Data Source=translations.db");
-
-var cfg = builder.Configuration;
-var httpFactory = builder.Services.AddHttpClient(); // ensures IHttpClientFactory is available
-```
-
-Notes:
-- For security, store secrets in User Secrets or environment variables, not in source control.
-- Each example below shows appsettings.json plus DI registration using IHttpClientFactory.
-
-### OpenAI (hosted)
-
-appsettings.json:
-```json
-{
-  "OpenAI": {
-    "ApiKey": "${OPENAI_API_KEY}",
-    "Model": "gpt-4o-mini"
-  }
-}
-```
-
-Note: Use a model suited for translation such as gpt-4o-mini, gpt-4o, or o3-mini.
-
-Environment variables (alternative):
-- OPENAI_API_KEY
-- OPENAI_MODEL (optional)
-
-Program.cs registration:
-```csharp
-builder.Services.AddHttpClient("OpenAI", c => c.BaseAddress = new Uri("https://api.openai.com/"));
-builder.Services.AddScoped<IAiTranslationProvider>(sp =>
-{
-    var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient("OpenAI");
-    var logger = sp.GetRequiredService<ILogger<mostlylucid.activetranslatetag.Services.Providers.OpenAiTranslationProvider>>();
-    var apiKey = cfg["OpenAI:ApiKey"] ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY")!;
-    var model = cfg["OpenAI:Model"] ?? Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? "gpt-4o-mini";
-    return new mostlylucid.activetranslatetag.Services.Providers.OpenAiTranslationProvider(http, logger, apiKey, model);
-});
-```
-
-### Azure OpenAI (Azure AI)
-
-You need your resource endpoint, deployment name, and an API key. The provider defaults api-version to 2024-06-01; override if needed.
-
-appsettings.json:
-```json
-{
-  "AzureOpenAI": {
-    "Endpoint": "https://your-resource.openai.azure.com",
-    "ApiKey": "${AZURE_OPENAI_API_KEY}",
-    "Deployment": "gpt-4o-mini",
-    "ApiVersion": "2024-06-01"
-  }
-}
-```
-
-Environment variables (alternative):
-- AZURE_OPENAI_ENDPOINT
-- AZURE_OPENAI_API_KEY
-- AZURE_OPENAI_DEPLOYMENT
-- AZURE_OPENAI_API_VERSION (optional)
-
-Program.cs registration:
-```csharp
-builder.Services.AddHttpClient("AzureOpenAI");
-builder.Services.AddScoped<IAiTranslationProvider>(sp =>
-{
-    var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient("AzureOpenAI");
-    var logger = sp.GetRequiredService<ILogger<mostlylucid.activetranslatetag.Services.Providers.AzureAiTranslationProvider>>();
-    var endpoint = cfg["AzureOpenAI:Endpoint"] ?? Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")!;
-    var apiKey = cfg["AzureOpenAI:ApiKey"] ?? Environment.GetEnvironmentVariable("AZURE_OPENAI_API_KEY")!;
-    var deployment = cfg["AzureOpenAI:Deployment"] ?? Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT")!;
-    var apiVersion = cfg["AzureOpenAI:ApiVersion"] ?? Environment.GetEnvironmentVariable("AZURE_OPENAI_API_VERSION") ?? "2024-06-01";
-    return new mostlylucid.activetranslatetag.Services.Providers.AzureAiTranslationProvider(http, logger, endpoint, apiKey, deployment, apiVersion);
-});
-```
-
-### Ollama (local LLM) - **Recommended for LLM Translation**
-
-Run Ollama locally for LLM-powered translation with context awareness. Supports the `description` parameter for better translation quality.
-
-**Why Ollama:**
-- Runs entirely on your hardware
-- No API costs
-- Privacy-focused
-- Supports context via description parameter
-- Access to many open-source models
-
-**Setup:**
-```bash
-# Install Ollama (see https://ollama.ai)
-# Pull the llama3 model
-ollama pull llama3
-```
-
-**appsettings.json:**
-```json
-{
-  "Ollama": {
-    "BaseUrl": "http://localhost:11434/",
-    "Model": "llama3"
-  }
-}
-```
-
-**Environment variables (alternative):**
-- OLLAMA_BASE_URL (optional, defaults to http://localhost:11434/)
-- OLLAMA_MODEL (optional, defaults to llama3)
-
-**Program.cs registration:**
-```csharp
-builder.Services.AddHttpClient("Ollama", c => c.BaseAddress = new Uri(cfg["Ollama:BaseUrl"] ?? Environment.GetEnvironmentVariable("OLLAMA_BASE_URL") ?? "http://localhost:11434/"));
-builder.Services.AddScoped<IAiTranslationProvider>(sp =>
-{
-    var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient("Ollama");
-    var logger = sp.GetRequiredService<ILogger<mostlylucid.activetranslatetag.Services.Providers.OllamaTranslationProvider>>();
-    var model = cfg["Ollama:Model"] ?? Environment.GetEnvironmentVariable("OLLAMA_MODEL") ?? "llama3";
-    var baseUrl = cfg["Ollama:BaseUrl"] ?? Environment.GetEnvironmentVariable("OLLAMA_BASE_URL");
-    return new mostlylucid.activetranslatetag.Services.Providers.OllamaTranslationProvider(http, logger, model, baseUrl);
-});
-```
-
-**Recommended models:**
-- `llama3` - Good balance of speed and quality
-- `llama3.1` - Improved performance
-- `qwen2.5` - Excellent for multilingual translation
-
-### LM Studio (local, OpenAI-compatible)
-
-LM Studio exposes an OpenAI-like API (default http://localhost:1234/v1). Choose a local model you have loaded.
-
-appsettings.json:
-```json
-{
-  "LmStudio": {
-    "BaseUrl": "http://localhost:1234/",
-    "Model": "qwen2.5:latest"
-  }
-}
-```
-
-Environment variables (alternative):
-- LMSTUDIO_BASE_URL (optional, defaults to http://localhost:1234/)
-- LMSTUDIO_MODEL (optional, defaults to qwen2.5:latest)
-
-Program.cs registration:
-```csharp
-builder.Services.AddHttpClient("LmStudio", c => c.BaseAddress = new Uri(cfg["LmStudio:BaseUrl"] ?? Environment.GetEnvironmentVariable("LMSTUDIO_BASE_URL") ?? "http://localhost:1234/"));
-builder.Services.AddScoped<IAiTranslationProvider>(sp =>
-{
-    var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient("LmStudio");
-    var logger = sp.GetRequiredService<ILogger<mostlylucid.activetranslatetag.Services.Providers.LmStudioTranslationProvider>>();
-    var model = cfg["LmStudio:Model"] ?? Environment.GetEnvironmentVariable("LMSTUDIO_MODEL") ?? "qwen2.5:latest";
-    var baseUrl = cfg["LmStudio:BaseUrl"] ?? Environment.GetEnvironmentVariable("LMSTUDIO_BASE_URL");
-    return new mostlylucid.activetranslatetag.Services.Providers.LmStudioTranslationProvider(http, logger, model, baseUrl);
-});
-```
-
-### EasyNMT (local machine translation) - **Recommended Default**
-
-Run EasyNMT locally for fast, privacy-focused machine translation without API keys. This is the recommended default provider for most applications.
-
-**Why EasyNMT:**
-- No API keys or cloud dependencies
-- Fast translation (typically <1 second)
-- Runs entirely on your infrastructure
-- Supports many language pairs
-- Free and open source
-
-**Docker setup:**
-```bash
-# CPU version (lighter weight)
-docker run -p 24080:80 easynmt/api:2.0.2-cpu
-
-# GPU version (faster, requires NVIDIA GPU)
-docker run --gpus all -p 24080:80 easynmt/api:2.0.2
-```
-
-**appsettings.json:**
-```json
-{
-  "EasyNMT": {
-    "BaseUrl": "http://localhost:24080/"
-  }
-}
-```
-
-**Environment variables (alternative):**
-- EASYNMT_BASE_URL (optional, defaults to http://localhost:24080/)
-
-**Program.cs registration:**
-```csharp
-builder.Services.AddHttpClient("EasyNMT");
-builder.Services.AddScoped<IAiTranslationProvider>(sp =>
-{
-    var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient("EasyNMT");
-    var logger = sp.GetRequiredService<ILogger<mostlylucid.activetranslatetag.Services.Providers.EasyNmtTranslationProvider>>();
-    var baseUrl = cfg["EasyNMT:BaseUrl"] ?? Environment.GetEnvironmentVariable("EASYNMT_BASE_URL") ?? "http://localhost:24080/";
-    return new mostlylucid.activetranslatetag.Services.Providers.EasyNmtTranslationProvider(http, logger, baseUrl);
-});
-```
-
-**Note:** EasyNMT is a machine translation provider and does not support the `description` parameter (used for providing context to LLM providers).
-
-Switching providers: register only one IAiTranslationProvider at a time, or use named registrations and a small adapter to pick one via config.
-
-Provider behavior notes:
-- All providers support single and batch translation; if batch JSON parsing fails, they fall back to per-item translation.
-- Prompts preserve placeholders like {0} and {name}, and HTML tags; still validate outputs for your UI.
-
-## Application Configuration
-
-```csharp
-// In Program.cs, configure services
-builder.Services.AddAutoTranslateWithSqlite("Data Source=translations.db");
-builder.Services.AddScoped<IAiTranslationProvider, YourAiProvider>();
-
-// Map the SignalR hub
-app.MapAutoTranslateHub(); // Default: /hubs/translation
-
-// Map controllers (if not already done)
-app.MapControllers();
-```
-
-## View Configuration
-
-Add to `_ViewImports.cshtml`:
-
-```cshtml
-@addTagHelper *, mostlylucid.activetranslatetag
-```
-
-## Usage
-
-### 1. Auto-Translate Tag Helper
-
-Automatically translates any HTML element:
-
-```html
-<h1 auto-translate="true">Welcome to My App</h1>
-<p auto-translate="true" translation-category="home">
-    This text will be automatically translated
-</p>
-<button auto-translate="true" translation-category="nav">
-    Click Me
-</button>
-```
-
-**With description parameter (LLM providers only):**
-
-The `translation-description` attribute provides context to LLM providers (like Ollama, OpenAI, Azure) to improve translation quality. Machine translation providers (EasyNMT, CTranslate2) ignore this parameter.
-
-```html
-<h1 auto-translate="true"
-    translation-description="Main headline for tech startup homepage">
-    Revolutionize Your Workflow
-</h1>
-
-<p auto-translate="true"
-   translation-category="marketing"
-   translation-description="Value proposition for B2B customers">
-    Streamline operations and boost productivity with our AI-powered platform.
-</p>
-
-<button auto-translate="true"
-        translation-description="Call-to-action button for free trial signup">
-    Start Free Trial
-</button>
-```
-
-### 2. Manual Translation Tag Helper
-
-Use explicit translation keys:
-
-```html
-<t key="home.welcome">Welcome</t>
-<t key="nav.home" category="navigation">Home</t>
-<t key="greeting" lang="es">Hello</t>
-```
-
-**With description parameter (LLM providers only):**
-
-```html
-<t key="home.hero"
-   description="Marketing slogan for tech startup targeting developers">
-    Build faster, ship smarter
-</t>
-
-<t key="pricing.cta"
-   description="Pricing page call-to-action for enterprise customers">
-    Contact Sales
-</t>
-
-<t key="nav.features"
-   category="navigation"
-   description="Navigation link to product features page">
-    Features
-</t>
-```
-
-**When to use description:**
-- Marketing copy that needs tone/style matching
-- Domain-specific terminology (legal, medical, technical)
-- Culturally-sensitive content
-- Ambiguous phrases that could be translated multiple ways
-- Brand voice consistency across languages
-
-### 3. Language Selector
-
-Add a language selector dropdown:
-
-```html
-<!-- Simple dropdown -->
-<language-selector style="dropdown" />
-
-<!-- With custom languages -->
-<language-selector
-    style="dropdown"
-    languages="en,es,fr,de,ja"
-    show-names="true"
-    show-codes="true" />
-
-<!-- Button style -->
-<language-selector style="buttons" class="my-custom-class" />
-
-<!-- Select box -->
-<language-selector style="select" />
-
-<!-- Flag icons (requires flag-icon-css) -->
-<language-selector style="flags" show-names="true" />
-```
-
-**Selector styles:**
-- `dropdown` - Bootstrap dropdown (default)
-- `buttons` - Button group
-- `select` - HTML select element
-- `flags` - Flag icons with names
-
-### 4. Translation Status Display
-
-Show current language and translation progress:
-
-```html
-<!-- Top-right corner (default) -->
-<translation-status />
-
-<!-- With detailed progress -->
-<translation-status position="top-right" show-details="true" />
-
-<!-- Different positions -->
-<translation-status position="bottom-left" />
-<translation-status position="inline" />
-```
-
-**Positions:**
-- `top-right` (default)
-- `top-left`
-- `bottom-right`
-- `bottom-left`
-- `inline`
-
-### 5. Include Scripts
-
-Add to your layout (before closing `</body>` tag):
-
-```html
-<!-- Basic (includes SignalR from CDN) -->
-<translation-scripts />
-
-<!-- With configuration -->
-<translation-scripts
-    signalr-hub="/hubs/translation"
-    include-signalr="true"
-    debug="false"
-    enable-notifications="true" />
-
-<!-- Without SignalR (no real-time updates) -->
-<translation-scripts include-signalr="false" />
-
-<!-- Debug mode -->
-<translation-scripts debug="true" />
-```
-
-## Complete Layout Example
-
-```html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <title>My App</title>
-    <link rel="stylesheet" href="~/css/site.css" />
-</head>
-<body>
-    <header>
-        <nav>
-            <t key="nav.home">Home</t>
-            <t key="nav.about">About</t>
-            <language-selector style="dropdown" languages="en,es,fr,de,ja" />
-        </nav>
-    </header>
-
-    <main>
-        @RenderBody()
-    </main>
-
-    <footer>
-        <p auto-translate="true" translation-category="footer">
-            © 2025 My Company. All rights reserved.
-        </p>
-    </footer>
-
-    <!-- Translation status indicator -->
-    <translation-status position="top-right" show-details="true" />
-
-    <!-- Translation scripts (must be at end of body) -->
-    <translation-scripts
-        signalr-hub="/hubs/translation"
-        debug="@(Environment.IsDevelopment())" />
-</body>
-</html>
-```
-
-## Configuration Matrix
-
-| Storage Type | Best For | Pros | Cons |
-|---|---|---|---|
-| **PostgreSQL** | Production, high traffic | Best performance, ACID, scalability, schema isolation | Requires PostgreSQL server |
-| **SQLite** | Small apps, development | Simple setup, file-based, portable | Not for high concurrency |
-| **JSON File** | Static sites, dev, version control | Human-readable, portable, no DB required | Slower for large datasets |
-
-## Complete Configuration Reference
-
-### Configuration-Based Setup (appsettings.json)
-
-The `AddAutoTranslateFromConfiguration` method reads settings from the `LlmTranslate` section of your configuration.
-
-**Complete appsettings.json example with all options:**
-
-```json
-{
-  "LlmTranslate": {
-    "Storage": {
-      "StorageType": "PostgreSql",
-      "ConnectionString": "Host=localhost;Database=myapp;Username=postgres;Password=secret",
-      "PostgreSqlSchema": "translations",
-      "JsonFilePath": "App_Data/translations.json",
-      "JsonAutoSave": true,
-      "EnableMemoryCache": true,
-      "MemoryCacheDurationMinutes": 60
-    },
-    "Ai": {
-      "DefaultProvider": "easynmt-local",
-      "Chunking": {
-        "Enabled": false,
-        "ChunkLength": 4000,
-        "Overlap": 200
-      },
-      "EasyNmtProviders": [
-        {
-          "Name": "easynmt-local",
-          "BaseUrl": "http://localhost:24080/"
-        },
-        {
-          "Name": "easynmt-remote",
-          "BaseUrl": "https://translate.example.com/"
-        }
-      ],
-      "CTranslate2Providers": [
-        {
-          "Name": "ctranslate2-local",
-          "BaseUrl": "http://localhost:5000/"
-        }
-      ],
-      "OllamaProviders": [
-        {
-          "Name": "ollama-local",
-          "BaseUrl": "http://localhost:11434/",
-          "Model": "llama3"
-        },
-        {
-          "Name": "ollama-qwen",
-          "BaseUrl": "http://localhost:11434/",
-          "Model": "qwen2.5"
-        }
-      ],
-      "OpenAiProviders": [
-        {
-          "Name": "openai-gpt4o",
-          "ApiKey": "${OPENAI_API_KEY}",
-          "Model": "gpt-4o-mini"
-        }
-      ],
-      "AzureAiProviders": [
-        {
-          "Name": "azure-gpt4",
-          "Endpoint": "https://your-resource.openai.azure.com",
-          "ApiKey": "${AZURE_OPENAI_API_KEY}",
-          "Deployment": "gpt-4o-mini",
-          "ApiVersion": "2024-06-01"
-        }
-      ],
-      "LmStudioProviders": [
-        {
-          "Name": "lmstudio-local",
-          "BaseUrl": "http://localhost:1234/",
-          "Model": "qwen2.5:latest"
-        }
-      ]
-    }
-  }
-}
-```
-
-### Configuration Options Reference
-
-#### Storage Section
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `StorageType` | string | `InMemory` | Storage backend: `InMemory`, `PostgreSql`, `Sqlite`, `JsonFile` |
-| `ConnectionString` | string | null | Database connection string (required for PostgreSQL/SQLite) |
-| `PostgreSqlSchema` | string | `"public"` | PostgreSQL schema name for translation tables |
-| `JsonFilePath` | string | null | Path to JSON file (required for JsonFile storage) |
-| `JsonAutoSave` | bool | `true` | Auto-save changes to JSON file immediately |
-| `EnableMemoryCache` | bool | `true` | Enable in-memory caching for faster lookups |
-| `MemoryCacheDurationMinutes` | int | `60` | How long to cache translations in memory |
-
-#### AI Section
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `DefaultProvider` | string | null | Name of the default provider to use (must match a provider Name) |
-
-#### Chunking Settings
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `Enabled` | bool | `false` | Enable text chunking for large documents |
-| `ChunkLength` | int | `4000` | Maximum characters per chunk |
-| `Overlap` | int | `200` | Character overlap between chunks |
-
-#### Provider Configurations
-
-Each provider type has an array of provider configurations. All providers share:
-
-| Option | Type | Required | Description |
-|--------|------|----------|-------------|
-| `Name` | string | Yes | Unique identifier for this provider instance |
-
-**EasyNmtProviders / CTranslate2Providers:**
-
-| Option | Type | Required | Description |
-|--------|------|----------|-------------|
-| `BaseUrl` | string | Yes | Base URL of the translation server |
-
-**OllamaProviders:**
-
-| Option | Type | Required | Description |
-|--------|------|----------|-------------|
-| `BaseUrl` | string | No | Ollama server URL (default: http://localhost:11434/) |
-| `Model` | string | Yes | Model name (e.g., llama3, qwen2.5) |
-
-**OpenAiProviders:**
-
-| Option | Type | Required | Description |
-|--------|------|----------|-------------|
-| `ApiKey` | string | Yes | OpenAI API key |
-| `Model` | string | Yes | Model name (e.g., gpt-4o-mini) |
-
-**AzureAiProviders:**
-
-| Option | Type | Required | Description |
-|--------|------|----------|-------------|
-| `Endpoint` | string | Yes | Azure OpenAI resource endpoint |
-| `ApiKey` | string | Yes | Azure OpenAI API key |
-| `Deployment` | string | Yes | Deployment name |
-| `ApiVersion` | string | No | API version (default: 2024-06-01) |
-
-**LmStudioProviders:**
-
-| Option | Type | Required | Description |
-|--------|------|----------|-------------|
-| `BaseUrl` | string | No | LM Studio server URL (default: http://localhost:1234/) |
-| `Model` | string | Yes | Model name loaded in LM Studio |
-
-### Using Environment Variables
-
-Sensitive values like API keys should be stored in environment variables or user secrets:
-
-```json
-{
-  "LlmTranslate": {
-    "Ai": {
-      "OpenAiProviders": [
-        {
-          "Name": "openai",
-          "ApiKey": "${OPENAI_API_KEY}",
-          "Model": "gpt-4o-mini"
-        }
-      ]
-    }
-  }
-}
-```
-
-Then set the environment variable:
-```bash
-export OPENAI_API_KEY="sk-..."
-```
-
-Or use .NET User Secrets:
-```bash
-dotnet user-secrets set "OPENAI_API_KEY" "sk-..."
-```
-
-## Advanced Configuration
-
-### Custom Cache Settings
-
-```csharp
-builder.Services.AddAutoTranslate(options =>
-{
-    options.StorageType = TranslationStorageType.PostgreSql;
-    options.ConnectionString = "...";
-    options.EnableMemoryCache = true;
-    options.MemoryCacheDurationMinutes = 120; // 2 hours
-});
-```
-
-### Multiple Languages Configuration
-
-```csharp
-// In appsettings.json
-{
-  "Translation": {
-    "SupportedLanguages": ["en", "es", "fr", "de", "ja", "zh", "ar"],
-    "DefaultLanguage": "en"
-  }
-}
-```
-
-### Environment-Specific Storage
-
-```csharp
-if (builder.Environment.IsDevelopment())
-{
-    // Use JSON file in development
-    builder.Services.AddAutoTranslateWithJsonFile("translations.json");
-}
-else
-{
-    // Use PostgreSQL in production
-    builder.Services.AddAutoTranslateWithPostgreSql(
-        builder.Configuration.GetConnectionString("Production"),
-        schema: "translations"
-    );
-}
-```
-
-## JavaScript API
-
-The translation system exposes a global JavaScript API:
-
-```javascript
-// Switch language
-window.setLanguage('es');
-
-// Or use the manager directly
-window.translationManager.switchLanguage('fr');
-
-// Get current language
-const lang = window.translationManager.getCurrentLanguage();
-
-// Collect all translation keys on page
-const keys = window.translationManager.collectTranslationKeys();
-```
-
-## Troubleshooting
-
-### Translations not appearing
-
-1. Check browser console for errors
-2. Verify SignalR connection (Network tab → WS)
-3. Check `preferred-language` cookie is set
-4. Enable debug mode: `<translation-scripts debug="true" />`
-
-### Database migrations failing
-
-```bash
-# For PostgreSQL with custom schema
-dotnet ef migrations add Initial --context TranslationDbContext -- --schema translations
-
-# For SQLite
-dotnet ef migrations add Initial --context TranslationDbContext
-```
-
-### SignalR not connecting
-
-1. Ensure `app.MapAutoTranslateHub()` is called
-2. Check hub path matches: `<translation-scripts signalr-hub="/hubs/translation" />`
-3. Verify SignalR CDN is accessible
-
-### EasyNMT / mostlylucid-nmt Issues
-
-**Translations returning unchanged text:**
-
-1. Verify server is running:
-```bash
-curl http://localhost:24080/translate \
-  -H "Content-Type: application/json" \
-  -d '{"text":"Hello","target_lang":"es","source_lang":""}'
-```
-
-Expected response format:
-```json
-{
-  "translated": ["Hola"]
-}
-```
-
-2. Check server logs for errors
-3. Ensure `source_lang` is empty string (not null) for auto-detection
-4. Verify language codes are ISO 639-1 (e.g., en, es, fr, de)
-
-**Docker container issues:**
-
-```bash
-# Check if container is running
-docker ps
-
-# View container logs
-docker logs <container-id>
-
-# Restart container
-docker restart <container-id>
-
-# Run with explicit port mapping
-docker run -p 24080:80 easynmt/api:2.0.2-cpu
-```
-
-**Response format compatibility:**
-
-The mostlylucid-nmt server uses `"translated": [...]` (array format). If using a different EasyNMT server that returns `"translation": "..."` (string format), the provider will auto-detect and handle both formats.
-
-### Ollama Issues
-
-**Model not found:**
-
-```bash
-# List available models
-ollama list
-
-# Pull the model
-ollama pull llama3
-```
-
-**Connection refused:**
-
-```bash
-# Check Ollama is running
-ollama serve
-
-# Or check the service status (Linux)
-systemctl status ollama
-```
-
-**Slow translation:**
-
-- Use smaller models (llama3 instead of llama3.1:70b)
-- Enable GPU acceleration if available
-- Reduce concurrent requests
-
-## Performance Tips
-
-1. **Use PostgreSQL for production** - best performance and concurrency
-2. **Enable memory caching** - reduces database queries
-3. **Implement batch translation** - faster than individual translations
-4. **Use JSON file for static content** - version control friendly
-5. **Set appropriate cache duration** - balance freshness vs performance
-
-## Requirements
-
-- .NET 9.0+
-- ASP.NET Core
-- One of: PostgreSQL, SQLite, or file system access
-- SignalR (included in ASP.NET Core)
+This translates text fragments while keeping HTML boundaries on the server, matching the active
+pipeline. `--mode markers` exercises the less reliable alternative of asking a tiny model to preserve
+HTML markers itself. Structural checks do not measure translation quality.
+
+## SQLite as a fast KV store
+
+The active path does not use Entity Framework. It uses parameterized primary-key SQL against a
+`WITHOUT ROWID` table, WAL mode and pooled connections. A bounded process-local memory cache sits
+in front of completed values. This is a memory cache, not a custom LFU implementation. Set
+`MemoryCacheEntries = 0` for SQLite-only operation.
+
+The key includes markup, source/target language, context and `CacheNamespace`. Editing a post or
+changing the configured model/prompt namespace naturally creates a different key. SQLite keeps
+completed translations across restarts; queued work is process-local and requeued when content
+is viewed again. Stored source/results have no automatic retention policy in this tutorial.
+
+The model only sees individual text fragments and user placeholders such as `{name}`. HTML boundary
+markers stay on the server; tiny models are not asked to reproduce them. This preserves markup but can
+lose grammatical context across inline tags. Translated output is HTML-encoded before original
+server-rendered tags are restored. Missing/reordered HTML markers or changed `{name}` placeholders
+fail the job, retaining the original content. The wrapper's language and `aria-busy` update on swap.
+Do not wrap scripts, styles or another active translation tag. Treat user HTML with your forum's
+normal sanitization rules before marking it as trusted Razor HTML.
+
+One worker and one deduplication map are scoped to a single app process. Multiple app instances
+need shared job coordination and a SignalR backplane. Keep the example single-instance until that
+is needed. Cache lookup speed does not imply model latency or translation quality.
 
 ## License
 
-Unlicense
-
-## Author
-
-mostlylucid.net - [https://www.mostlylucid.net](https://www.mostlylucid.net)
-
-## Contributing
-
-Contributions welcome! Please open an issue or PR at [https://github.com/mostlylucid/mostlylucid.activetranslatetag](https://github.com/mostlylucid/mostlylucid.activetranslatetag)
-
-## Support
-
-- Documentation: This README
-- GitHub Issues: [Report issues](https://github.com/mostlylucid/mostlylucid.activetranslatetag/issues)
-- Website: [mostlylucid.net](https://www.mostlylucid.net)
+Unlicense. [mostlylucid.net](https://www.mostlylucid.net)

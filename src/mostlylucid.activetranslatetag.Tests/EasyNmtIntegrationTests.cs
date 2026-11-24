@@ -19,7 +19,7 @@ public class EasyNmtIntegrationTests
         _provider = new EasyNmtTranslationProvider(httpClient, logger, "http://localhost:24080/");
     }
 
-    [Fact]
+    [Fact(Skip = "Legacy EasyNMT live-server test; excluded from the generative LLM tutorial.")]
     public async Task TranslateAsync_SingleText_ReturnsTranslation()
     {
         // Arrange
@@ -36,7 +36,7 @@ public class EasyNmtIntegrationTests
         Console.WriteLine($"Translation (fr): {result}");
     }
 
-    [Fact]
+    [Fact(Skip = "Legacy EasyNMT live-server test; excluded from the generative LLM tutorial.")]
     public async Task TranslateAsync_EnglishToGerman_ReturnsGermanText()
     {
         // Arrange
@@ -53,7 +53,7 @@ public class EasyNmtIntegrationTests
         Console.WriteLine($"Translation (de): {result}");
     }
 
-    [Fact]
+    [Fact(Skip = "Legacy EasyNMT live-server test; excluded from the generative LLM tutorial.")]
     public async Task TranslateAsync_EnglishToSpanish_ReturnsSpanishText()
     {
         // Arrange
@@ -70,7 +70,7 @@ public class EasyNmtIntegrationTests
         Console.WriteLine($"Translation (es): {result}");
     }
 
-    [Fact]
+    [Fact(Skip = "Legacy EasyNMT live-server test; excluded from the generative LLM tutorial.")]
     public async Task TranslateAsync_LongText_ReturnsTranslation()
     {
         // Arrange
@@ -89,7 +89,7 @@ public class EasyNmtIntegrationTests
         Console.WriteLine($"Translation (fr): {result}");
     }
 
-    [Fact]
+    [Fact(Skip = "Legacy EasyNMT live-server test; excluded from the generative LLM tutorial.")]
     public async Task TranslateBatchAsync_MultipleTexts_ReturnsAllTranslations()
     {
         // Arrange
@@ -116,7 +116,7 @@ public class EasyNmtIntegrationTests
         }
     }
 
-    [Fact]
+    [Fact(Skip = "Legacy EasyNMT live-server test; excluded from the generative LLM tutorial.")]
     public async Task TranslateBatchAsync_EmptyDictionary_ReturnsEmptyDictionary()
     {
         // Arrange
@@ -130,7 +130,7 @@ public class EasyNmtIntegrationTests
         result.Should().BeEmpty();
     }
 
-    [Fact]
+    [Fact(Skip = "Legacy EasyNMT live-server test; excluded from the generative LLM tutorial.")]
     public async Task TranslateAsync_EmptyString_ReturnsOriginal()
     {
         // Arrange
@@ -144,7 +144,7 @@ public class EasyNmtIntegrationTests
         result.Should().NotBeNull();
     }
 
-    [Fact]
+    [Fact(Skip = "Legacy EasyNMT live-server test; excluded from the generative LLM tutorial.")]
     public async Task TranslateAsync_SpecialCharacters_HandlesCorrectly()
     {
         // Arrange
@@ -161,7 +161,7 @@ public class EasyNmtIntegrationTests
         Console.WriteLine($"Translation (de): {result}");
     }
 
-    [Fact]
+    [Fact(Skip = "Legacy EasyNMT live-server test; excluded from the generative LLM tutorial.")]
     public async Task TranslateBatchAsync_LargerBatch_HandlesCorrectly()
     {
         // Arrange

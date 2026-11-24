@@ -1,71 +1,58 @@
-@{
-    ViewData["Title"] = "LLM Translate Demo";
-}
-
-<div class="container mt-4">
-    <h1><t key="home.title" description="Page title for translation demo application">Welcome to LLM Translate Demo</t></h1>
-    <p class="lead">
-        <t key="home.lead" description="Introduction paragraph explaining the demo features">This page demonstrates server-side TagHelpers and client-side language switching with EasyNMT and Ollama.</t>
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>Active translation — Tag Helpers, View Components &amp; HTMX 4</title>
+    <link rel="stylesheet" href="~/css/demo.css" />
+    <script src="~/lib/htmx/htmx.min.js" defer></script>
+    <script src="~/lib/signalr/signalr.min.js" defer></script>
+    <script src="~/_content/mostlylucid.activetranslatetag/js/active-translation.js"
+            data-active-translation-hub="@Url.Content("~/_active-translate/hub")" defer></script>
+</head>
+<body>
+<main>
+    <p class="eyebrow">ASP.NET Core tutorial · HTMX 4</p>
+    <h1>Content that translates<br />when it’s ready.</h1>
+    <p class="intro">A Tag Helper renders the original message. A local LLM works in the background.
+        SignalR announces availability, then HTMX fetches and swaps that one fragment.</p>
+    <p class="provider">Provider: <strong>@Configuration["Translation:Provider"]</strong>
+        @if (Configuration["Translation:Provider"] == "Sample")
+        { <span>— fixed French examples; no model is running.</span> }
     </p>
-
-    <language-selector></language-selector>
-
-    <hr/>
-
-    <h3><t key="home.section" description="Section heading for example translations">Example Translations</t></h3>
-
-    <div class="card mb-3">
-        <div class="card-header">Basic Translations</div>
-        <div class="card-body">
-            <ul>
-                <li><t key="home.item1">Simple sentence to translate.</t></li>
-                <li><t key="home.item2">Another sentence with more words.</t></li>
-                <li><t key="home.item3">Numbers 1, 2, 3 and symbols !?</t></li>
-            </ul>
-        </div>
-    </div>
-
-    <div class="card mb-3">
-        <div class="card-header">Translations with Context (LLM providers only)</div>
-        <div class="card-body">
-            <p>
-                <t key="home.marketing.cta"
-                   description="Call-to-action button for tech startup targeting developers">
-                    Start Building Today
-                </t>
-            </p>
-            <p>
-                <t key="home.feature.ai"
-                   description="Product feature description for AI-powered translation service">
-                    Leverage cutting-edge AI to translate your content with context awareness.
-                </t>
-            </p>
-            <p>
-                <t key="home.pricing.enterprise"
-                   description="Enterprise pricing tier call-to-action for B2B customers">
-                    Contact us for enterprise pricing
-                </t>
-            </p>
-        </div>
-    </div>
-
-    <div class="card mb-3">
-        <div class="card-header">Auto-Translate Elements</div>
-        <div class="card-body">
-            <h4 auto-translate="true"
-                translation-description="Section heading about configuration">
-                Configuration Options
-            </h4>
-            <p auto-translate="true"
-               translation-category="technical"
-               translation-description="Technical documentation about default provider">
-                The default provider is set to EasyNMT running on port 24080. You can switch to Ollama by changing the DefaultProvider setting.
-            </p>
-        </div>
-    </div>
-
-    <translation-status position="top-right" show-details="true" />
-</div>
-
-<!-- Include translation scripts and SignalR client (for OOB updates) -->
-<translation-scripts signalr-hub="/hubs/translation" include-signalr="true" debug="true" />
+    <vc:active-translation-status></vc:active-translation-status>
+    <section class="posts" aria-label="Forum messages translated into French">
+        <article>
+            <p class="author">Alex · Original: English → French</p>
+            <active-translate language="fr" description="A friendly public forum greeting">
+                <h2>Hello, forum!</h2><p>This post translates when the server is ready.</p>
+            </active-translate>
+        </article>
+        <article>
+            <p class="author">Sam · Markup and placeholders stay intact</p>
+            <active-translate language="fr" description="A forum welcome with a named placeholder and a help link">
+                <p>Welcome, {name}.</p><p>Read the <a href="https://www.mostlylucid.net">forum guide</a>.</p>
+            </active-translate>
+        </article>
+        <article>
+            <p class="author">Same content, a second location · One inference, two swaps</p>
+            <active-translate language="fr" description="A friendly public forum greeting">
+                <h2>Hello, forum!</h2><p>This post translates when the server is ready.</p>
+            </active-translate>
+        </article>
+    </section>
+    <section class="lesson">
+        <h2>One tag, an active fragment</h2>
+        <pre><code>&lt;active-translate language="fr" description="A forum message"&gt;
+    &lt;p&gt;@@Model.Message&lt;/p&gt;
+&lt;/active-translate&gt;</code></pre>
+        <p>Razor encodes the message. The helper preserves the surrounding HTML, creates a content key,
+            and emits <code>hx-get</code>, <code>hx-trigger="translation-ready"</code>, and <code>hx-swap="innerHTML"</code>.</p>
+        <p>SQLite keeps completed translations across restarts. Refresh this page after completion to see a cache hit.
+            Add <code>mode="server"</code> to await translation before sending the HTML.</p>
+    </section>
+</main>
+</body>
+</html>

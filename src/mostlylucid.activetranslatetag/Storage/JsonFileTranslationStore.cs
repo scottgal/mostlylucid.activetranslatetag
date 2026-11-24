@@ -33,6 +33,9 @@ public class JsonFileTranslationStore
         _data = LoadFromFile();
     }
 
+    private static readonly JsonSerializerOptions ReadOptions = new() { PropertyNameCaseInsensitive = true };
+    private static readonly JsonSerializerOptions WriteOptions = new() { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
     private JsonTranslationData LoadFromFile()
     {
         if (!File.Exists(_filePath))
@@ -44,10 +47,7 @@ public class JsonFileTranslationStore
         try
         {
             var json = File.ReadAllText(_filePath);
-            var data = JsonSerializer.Deserialize<JsonTranslationData>(json, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
+            var data = JsonSerializer.Deserialize<JsonTranslationData>(json, ReadOptions);
 
             _logger.LogInformation("Loaded {StringCount} translation strings from {Path}",
                 data?.Strings.Count ?? 0, _filePath);
@@ -66,11 +66,7 @@ public class JsonFileTranslationStore
         await _fileLock.WaitAsync(ct);
         try
         {
-            var json = JsonSerializer.Serialize(_data, new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-            });
+            var json = JsonSerializer.Serialize(_data, WriteOptions);
 
             await File.WriteAllTextAsync(_filePath, json, ct);
             _logger.LogDebug("Saved {StringCount} translation strings to {Path}", _data.Strings.Count, _filePath);

@@ -26,7 +26,7 @@ public class AzureAiTranslationProvider : IAiTranslationProvider
 
         if (!string.IsNullOrWhiteSpace(baseEndpoint))
         {
-            var baseUri = baseEndpoint.EndsWith("/") ? baseEndpoint : baseEndpoint + "/";
+            var baseUri = baseEndpoint.EndsWith('/') ? baseEndpoint : baseEndpoint + "/";
             _http.BaseAddress = new Uri(baseUri);
         }
         _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
@@ -91,6 +91,8 @@ public class AzureAiTranslationProvider : IAiTranslationProvider
         return parsed;
     }
 
+    private static readonly JsonSerializerOptions BatchJsonOptions = new() { PropertyNameCaseInsensitive = true };
+
     private static Dictionary<string, string> TryParseBatch(string? text)
     {
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -98,7 +100,7 @@ public class AzureAiTranslationProvider : IAiTranslationProvider
         try
         {
             var arrayText = ExtractFirstJsonArray(text) ?? text;
-            var items = JsonSerializer.Deserialize<List<BatchItem>>(arrayText, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            var items = JsonSerializer.Deserialize<List<BatchItem>>(arrayText, BatchJsonOptions);
             if (items != null)
             {
                 foreach (var it in items)

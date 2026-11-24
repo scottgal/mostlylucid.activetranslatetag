@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
@@ -20,67 +20,41 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageReleaseNotes>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)\..\..\releasenotext.tx'))</PackageReleaseNotes>
 
-    <!-- Disable default content items to avoid duplicates -->
-    <EnableDefaultContentItems>false</EnableDefaultContentItems>
-    <EnableDefaultItems>false</EnableDefaultItems>
-    <GenerateStaticWebAssetsManifest>false</GenerateStaticWebAssetsManifest>
-    <IncludeStaticWebAssets>false</IncludeStaticWebAssets>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Explicitly include source files, exclude Examples folder -->
-    <Compile Include="**\*.cs" Exclude="bin\**;obj\**;Examples\**" />
-    <EmbeddedResource Include="**\*.resx" Exclude="bin\**;obj\**" />
-
-    <!-- Include example files as content only (not compiled) -->
-    <None Include="Examples\**\*" Pack="true" PackagePath="contentFiles\any\net9.0\Examples" />
-  </ItemGroup>
-
-  <ItemGroup>
+    <Compile Remove="Examples/**/*.cs" />
     <!-- ASP.NET Core dependencies -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
 
     <!-- Entity Framework Core for PostgreSQL -->
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="11.0.0" />
 
     <!-- Entity Framework Core for SQLite -->
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="11.0.0" />
 
     <!-- Entity Framework Core for SQL Server -->
-    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="11.0.0" />
+
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="11.0.0" />
 
     <!-- AI capabilities -->
     <PackageReference Include="Microsoft.Extensions.AI" Version="9.10.1" />
     <PackageReference Include="Serilog" Version="4.2.0" />
 
     <!-- JSON serialization for file storage -->
-    <PackageReference Include="System.Text.Json" Version="9.0.0" />
 
     <!-- SignalR is included in Microsoft.AspNetCore.App -->
 
     <!-- Utilities -->
-    <PackageReference Include="System.IO.Hashing" Version="9.0.10" />
+    <PackageReference Include="System.IO.Hashing" Version="11.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- Include README in package from repository root -->
     <None Include="..\..\README.md" Pack="true" PackagePath="/" />
 
-    <!-- Include JavaScript files (both source and minified) as content -->
-    <Content Include="wwwroot\**\*.js" Pack="true" PackagePath="contentFiles\any\net9.0\wwwroot" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="wwwroot\**\*.js" Pack="true" PackagePath="content\wwwroot" />
-    <Content Include="wwwroot\**\*.map" Pack="true" PackagePath="contentFiles\any\net9.0\wwwroot" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="wwwroot\**\*.map" Pack="true" PackagePath="content\wwwroot" />
-    <Content Include="wwwroot\css\**\*" Pack="true" PackagePath="contentFiles\any\net9.0\wwwroot\css" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="wwwroot\css\**\*" Pack="true" PackagePath="content\wwwroot\css" />
   </ItemGroup>
-
-  <!-- Build JavaScript before pack -->
-  <Target Name="BuildJavaScript" BeforeTargets="BeforeBuild">
-    <Message Importance="high" Text="Minifying JavaScript files..." />
-    <Exec Command="npm install" WorkingDirectory="$(ProjectDir)..\.." Condition="!Exists('$(ProjectDir)..\..\node_modules')" />
-    <Exec Command="npm run minify" WorkingDirectory="$(ProjectDir)..\.." />
-  </Target>
 
 </Project>

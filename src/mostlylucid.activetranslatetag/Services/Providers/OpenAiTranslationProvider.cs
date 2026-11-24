@@ -89,6 +89,8 @@ public class OpenAiTranslationProvider : IAiTranslationProvider
         return parsed;
     }
 
+    private static readonly JsonSerializerOptions BatchJsonOptions = new() { PropertyNameCaseInsensitive = true };
+
     private static Dictionary<string, string> TryParseBatch(string? text)
     {
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -96,7 +98,7 @@ public class OpenAiTranslationProvider : IAiTranslationProvider
         try
         {
             var arrayText = ExtractFirstJsonArray(text) ?? text;
-            var items = JsonSerializer.Deserialize<List<BatchItem>>(arrayText, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            var items = JsonSerializer.Deserialize<List<BatchItem>>(arrayText, BatchJsonOptions);
             if (items != null)
             {
                 foreach (var it in items)

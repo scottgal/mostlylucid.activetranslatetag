@@ -1,0 +1,14 @@
+@model mostlylucid.activetranslatetag.Active.ActiveTranslationViewModel
+<div id="@Model.Id" class="@Model.CssClass"
+     lang="@Model.Language"
+     data-translation-id="@Model.TranslationId"
+     data-translation-state="@Model.State"
+     data-translation-language="@Model.TargetLanguage"
+     data-translation-token="@Model.Token"
+     hx-get="@Model.FragmentUrl"
+     hx-trigger="@(Model.Token == null ? null : "translation-ready")"
+     hx-swap="@(Model.Token == null ? null : "innerHTML")"
+     hx-sync="@(Model.Token == null ? null : "this:replace")"
+     aria-live="polite" aria-busy="@(Model.State == "pending" ? "true" : "false")">
+    @Model.Content
+</div>

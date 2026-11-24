@@ -73,6 +73,8 @@ public class ChunkingAiTranslationProvider : IAiTranslationProvider
         return result;
     }
 
+    private static readonly char[] WordBoundaries = [' ', '\n', '\r', '\t'];
+
     private static List<string> ChunkText(string text, int chunkLength, int overlap)
     {
         var chunks = new List<string>();
@@ -86,7 +88,7 @@ public class ChunkingAiTranslationProvider : IAiTranslationProvider
             int endExclusive = start + length;
             if (endExclusive < text.Length)
             {
-                int lastSpace = text.LastIndexOfAny(new[] { ' ', '\n', '\r', '\t' }, endExclusive - 1, Math.Min(40, length));
+                int lastSpace = text.LastIndexOfAny(WordBoundaries, endExclusive - 1, Math.Min(40, length));
                 if (lastSpace > start + 10) // avoid tiny trailing fragment
                 {
                     endExclusive = lastSpace + 1;

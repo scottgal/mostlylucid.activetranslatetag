@@ -45,7 +45,7 @@ public class TranslateTagHelper : TagHelper
 
         // Get translated text
         var translatedText = string.IsNullOrEmpty(Language)
-            ? await _translator.T(Key, defaultText, Description)
+            ? await _translator.T(Key, defaultText: defaultText, description: Description)
             : await _translator.T(Key, Language, defaultText, Description);
 
         // Generate a unique, compact ID based on the translation key for HTMX targeting
